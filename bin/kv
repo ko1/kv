@@ -1,0 +1,329 @@
+#! /usr/bin/env ruby
+
+require "curses"
+require 'stringio'
+
+class KV_PushScreen < Exception
+  attr_reader :screen
+  def initialize screen
+    @screen = screen
+  end
+end
+
+class KV_PopScreen < Exception
+end
+
+class KV_Screen
+  def initialize input
+    @y = 0
+    @lines  = []
+    @status_line = ''
+    @mode = :screen
+    @line_mode = true
+
+    @mouse = false
+    @search = nil
+
+    @reader_thread = Thread.new{
+      while line = input.gets
+        @lines << line.chomp
+      end
+    }
+    sleep 0.001
+  end
+
+  attr_reader :y
+  def y=(y)
+    if y > (line = @lines.size - (Curses.lines-1))
+      @y = line
+    else
+      @y = y
+    end
+
+    @y = 0 if @y < 0
+  end
+
+  def init_screen
+    Curses.init_screen
+    Curses.stdscr.keypad(true)
+
+    if @mouse
+      Curses.mousemask(Curses::BUTTON1_CLICKED | Curses::BUTTON2_CLICKED |
+                       Curses::BUTTON3_CLICKED | Curses::BUTTON4_CLICKED)
+    else
+      Curses.mousemask(0)
+    end
+  end
+
+  
+  def standout
+    Curses.standout
+    yield
+    Curses.standend
+  end
+
+  def screen_status str, post = nil
+    Curses.setpos Curses.lines-1, 0
+    Curses.addstr ' '.ljust(Curses.cols)
+    status = "STATUS: #{str}"
+
+    standout{
+      Curses.setpos Curses.lines-1, 0
+      Curses.addstr status
+    }
+    Curses.addstr post if post
+    Curses.standend
+  end
+
+  def render_data
+    Curses.clear
+    lines = Curses.lines
+    cols  = Curses.cols
+
+    (lines-1).times{|i|
+      lno = i + self.y
+      line = @lines[lno]
+      break unless line
+      Curses.setpos i, 0
+
+      if @line_mode
+        Curses.addstr('%4d | ' % (lno+1))
+      end
+
+      if !@search
+        Curses.addstr line
+      else
+        partition(line, @search).each{|(matched, str)|
+          if matched == :match
+            standout{
+              Curses.addstr str
+            }
+          else
+            Curses.addstr str
+          end
+        }
+      end
+    }
+  end
+
+  def render_status
+    mouse  = @mouse == :mouse_mode ? ' [MOUSE]' : ''
+    search = @search ? " s:#{@search}" : ''
+    screen_status "lines:#{@lines.size}#{search}#{mouse} $ "
+  end
+
+  def render_screen
+    render_data
+    render_status
+    Curses.getch
+  end
+
+  def search_next start
+    (start...@lines.size).each{|i|
+      line = @lines[i]
+      if @lines[i].match(@search)
+        self.y = i
+        return true
+      end
+    }
+    return false
+  end
+
+  def search_prev start
+    start.downto(0){|i|
+      if @lines[i].match(@search)
+        self.y = i
+        return true
+      end
+    }
+    return false
+  end
+
+  def input_str pattern, str = ''
+    loop{
+      ev = Curses.getch
+
+      case ev
+      when 10
+        return str
+      when Curses::KEY_BACKSPACE
+        ystr.chop!
+      when pattern
+        str << ev
+      else
+        log "failure: #{ev.inspect}"
+        return nil
+      end
+    }
+  end
+
+  def control_screen
+    ev = render_screen
+
+    case ev
+    when 'm'
+      @mouse = !@mouse
+      Curses.close_screen
+      init_screen
+    when Curses::KEY_MOUSE
+      log Curses.getmouse, "mouse ->"
+
+    when 'q'
+      raise KV_PopScreen
+
+    when Curses::KEY_UP, 'k'
+      self.y -= 1
+    when Curses::KEY_DOWN, 'j'
+      self.y += 1
+    when 'g'
+      self.y = 0
+    when 'G'
+      self.y = @lines.size - Curses.lines + 1
+    when ' ', Curses::KEY_NPAGE
+      self.y += Curses.lines-1
+    when Curses::KEY_PPAGE
+      self.y -= Curses.lines-1
+
+    when /[0-9]/
+      screen_status "Goto:", ev
+      ystr = input_str(/\d/, ev)
+      if ystr && !ystr.empty?
+        self.y = ystr.to_i - 1
+      end
+
+    when '/'
+      screen_status "Search:"
+      search = input_str(/./)
+      if search && !search.empty?
+        @search = search
+        search_next self.y
+      end
+    when 'n'
+      search_next self.y+1 if @search
+    when 'p'
+      search_prev self.y-1 if @search
+    when 'N'
+      @line_mode = !@line_mode
+
+    when 't'
+      Curses.close_screen
+      @mode = :terminal
+
+    when '?'
+      raise KV_PushScreen.new(KV_Screen.new help_io)
+
+    else
+      log ev, 'screen input: '
+    end
+  ensure
+    if @mode == :screen
+      Curses.close_screen
+    end
+  end
+
+  def control_terminal
+    print '$ '
+    ev = gets
+    if ev[0] == 's'
+      @mode = :screen
+      init_screen
+    end
+  end
+
+  def control
+    case @mode
+    when :screen
+      control_screen
+    when :terminal
+      control_terminal
+    else
+      raise
+    end
+  end
+end
+
+HELP_MESSAGE = DATA.read
+def help_io
+  help_io = StringIO.new(HELP_MESSAGE)
+end
+
+class KV
+  def initialize files
+    if files.empty?
+      if STDIN.isatty
+        input = help_io
+      else
+        input = STDIN.dup
+        STDIN.reopen('/dev/tty')
+        trap(:INT){
+          log "SIGINT"
+        }
+      end
+    else
+      input = open(ARGV.shift)
+    end
+
+    @screens = [KV_Screen.new(input)]
+  end
+
+  def control
+    until @screens.empty?
+      begin
+        @screens.last.control
+      rescue KV_PopScreen
+        @screens.pop
+      rescue KV_PushScreen => e
+        @screens.push e.screen
+      end
+    end
+  ensure
+    log "terminate"
+  end
+end
+
+$debug_log = 'log'
+
+def log obj, prefix = ''
+  if $debug_log
+    File.open($debug_log, 'a'){|f|
+      f.puts "#{prefix}#{obj.class}: #{obj.inspect}"
+    }
+  end
+end
+
+def partition str, search
+  results = []
+  loop{
+    r = str.match(search){|m|
+      results << [:unmatch, m.pre_match]
+      results << [:match, m.to_s]
+      str = m.post_match
+    }
+    break unless r
+  }
+  results << [:unmatch, str]
+end
+
+kv = KV.new ARGV
+kv.control
+
+__END__
+kv: A pager by Ruby
+
+  ?: show the help message
+  q: quit
+
+  k, j, [UP], [DOWN],
+  [PAGE UP], [PAGE DOWN], [SPACE]: move cursor
+  g: Goto first line
+  G: Goto last line (current last line)
+  \d+: Goto specified line
+
+  /: search
+  n: search next
+  p: search preview
+  
+  N: toggle line mode
+  m: toggle mouse mode
+  t: terminal (REPL) mode
+
