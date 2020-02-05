@@ -173,13 +173,6 @@ class KV_Screen
     ev = render_screen
 
     case ev
-    when 'm'
-      @mouse = !@mouse
-      Curses.close_screen
-      init_screen
-    when Curses::KEY_MOUSE
-      log Curses.getmouse, "mouse ->"
-
     when 'q'
       raise KV_PopScreen
 
@@ -214,9 +207,37 @@ class KV_Screen
       search_next self.y+1 if @search
     when 'p'
       search_prev self.y-1 if @search
+
+    when 's'
+      screen_status "Save file:"
+      file = input_str /./
+      begin
+        if file && !file.empty?
+          if File.exist? file
+            screen_status "#{file.dump} exists. Override? [y/n] "
+            yn = input_str(/[yn]/)
+            if yn == 'y'
+              File.write(file, @lines.join("\n"))
+            else
+              # do nothing
+              end
+            else
+              File.write(file, @lines.join("\n"))
+            end
+          end
+        rescue SystemCallError
+          # TODO: status line
+        end
+
+    when 'm'
+      @mouse = !@mouse
+      Curses.close_screen
+      init_screen
+    when Curses::KEY_MOUSE
+      log Curses.getmouse, "mouse ->"
+
     when 'N'
       @line_mode = !@line_mode
-
     when 't'
       Curses.close_screen
       @mode = :terminal
@@ -226,10 +247,6 @@ class KV_Screen
 
     else
       log ev, 'screen input: '
-    end
-  ensure
-    if @mode == :screen
-      Curses.close_screen
     end
   end
 
@@ -293,7 +310,7 @@ class KV
   end
 end
 
-$debug_log = 'log'
+$debug_log = ENV['KV_DEBUG']
 
 def log obj, prefix = ''
   if $debug_log
@@ -334,7 +351,9 @@ kv: A pager by Ruby
   /: search
   n: search next
   p: search preview
-  
+
+  s: Save screen buffer to file
+
   N: toggle line mode
   m: toggle mouse mode
   t: terminal (REPL) mode
