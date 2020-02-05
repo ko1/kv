@@ -39,6 +39,7 @@ class KV_Screen
       @yq = nil
     }
     sleep 0.001
+    init_screen
   end
 
   attr_reader :y
@@ -150,6 +151,13 @@ class KV_Screen
     return false
   end
 
+  def key_name ev
+    Curses.constants.grep(/KEY/){|c|
+      return c if Curses.const_get(c) == ev
+    }
+    ev
+  end
+
   def input_str pattern, str = ''
     loop{
       ev = Curses.getch
@@ -158,11 +166,11 @@ class KV_Screen
       when 10
         return str
       when Curses::KEY_BACKSPACE
-        ystr.chop!
+        str.chop!
       when pattern
         str << ev
       else
-        log "failure: #{ev.inspect}"
+        log "failure: #{key_name ev}"
         return nil
       end
     }
@@ -201,6 +209,8 @@ class KV_Screen
       if search && !search.empty?
         @search = search
         search_next self.y
+      else
+        @search = nil
       end
     when 'n'
       search_next self.y+1 if @search
@@ -235,7 +245,8 @@ class KV_Screen
     when Curses::KEY_MOUSE
       m = Curses.getmouse
       log m, "mouse ->"
-      log [m.bstate, m.x, m.y, m.z, m.eid]
+      # log [m.bstate, m.x, m.y, m.z, m.eid]
+      log @lines[self.y + m.y]
 
     when 'N'
       @line_mode = !@line_mode
@@ -247,7 +258,7 @@ class KV_Screen
       raise KV_PushScreen.new(KV_Screen.new help_io)
 
     else
-      log ev, 'screen input: '
+      log key_name(ev), 'screen input: '
     end
   end
 
