@@ -23,11 +23,21 @@ class KV_Screen
 
     @mouse = false
     @search = nil
+    @loading = true
+    @buffer_lines = 10_000
+    @yq = Queue.new
 
     @reader_thread = Thread.new{
       while line = input.gets
         @lines << line.chomp
+        while @lines.size > @y + @buffer_lines
+          @yq.pop
+          @yq.clear
+        end
       end
+      @yq.clear
+      @reading = false
+      @yq = nil
     }
     sleep 0.001
   end
@@ -41,6 +51,7 @@ class KV_Screen
     end
 
     @y = 0 if @y < 0
+    @yq << nil if @yq
   end
 
   def init_screen
@@ -109,7 +120,8 @@ class KV_Screen
   def render_status
     mouse  = @mouse == :mouse_mode ? ' [MOUSE]' : ''
     search = @search ? " s:#{@search}" : ''
-    screen_status "lines:#{@lines.size}#{search}#{mouse} $ "
+    loading = @loading ? " (loading) " : ''
+    screen_status "lines:#{@lines.size}#{loading}#{search}#{mouse} $ "
   end
 
   def render_screen
