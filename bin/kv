@@ -31,12 +31,11 @@ class KV_Screen
       while line = input.gets
         @lines << line.chomp
         while @lines.size > @y + @buffer_lines
-          @yq.pop
-          @yq.clear
+          @yq.pop; @yq.clear
         end
+        @yq.clear
       end
-      @yq.clear
-      @reading = false
+      @loading = false
       @yq = nil
     }
     sleep 0.001
@@ -118,7 +117,7 @@ class KV_Screen
   end
 
   def render_status
-    mouse  = @mouse == :mouse_mode ? ' [MOUSE]' : ''
+    mouse  = @mouse ? ' [MOUSE]' : ''
     search = @search ? " s:#{@search}" : ''
     loading = @loading ? " (loading) " : ''
     screen_status "lines:#{@lines.size}#{loading}#{search}#{mouse} $ "
@@ -234,7 +233,9 @@ class KV_Screen
       Curses.close_screen
       init_screen
     when Curses::KEY_MOUSE
-      log Curses.getmouse, "mouse ->"
+      m = Curses.getmouse
+      log m, "mouse ->"
+      log [m.bstate, m.x, m.y, m.z, m.eid]
 
     when 'N'
       @line_mode = !@line_mode
