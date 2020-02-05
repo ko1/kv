@@ -1,0 +1,21 @@
+kv: A pager by Ruby Command list
+
+  ?: show the help message
+  q: quit
+
+  k, j, [UP], [DOWN],
+  [PAGE UP], [PAGE DOWN], [SPACE]: move cursor
+  g: Goto first line
+  G: Goto last line (current last line)
+  \d+: Goto specified line
+
+  /: search
+  n: search next
+  p: search preview
+
+  s: Save screen buffer to file
+
+  N: toggle line mode
+  m: toggle mouse mode
+  t: terminal (REPL) mode
+

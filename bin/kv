@@ -283,9 +283,8 @@ class KV_Screen
   end
 end
 
-HELP_MESSAGE = DATA.read
 def help_io
-  help_io = StringIO.new(HELP_MESSAGE)
+  help_io = StringIO.new(File.read(File.join(__dir__, '../COMMAND')))
 end
 
 class KV
@@ -347,26 +346,3 @@ end
 
 kv = KV.new ARGV
 kv.control
-
-__END__
-kv: A pager by Ruby
-
-  ?: show the help message
-  q: quit
-
-  k, j, [UP], [DOWN],
-  [PAGE UP], [PAGE DOWN], [SPACE]: move cursor
-  g: Goto first line
-  G: Goto last line (current last line)
-  \d+: Goto specified line
-
-  /: search
-  n: search next
-  p: search preview
-
-  s: Save screen buffer to file
-
-  N: toggle line mode
-  m: toggle mouse mode
-  t: terminal (REPL) mode
-
