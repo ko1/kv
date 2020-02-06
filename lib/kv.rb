@@ -47,18 +47,19 @@ class KV_Screen
   end
 
   attr_reader :y
+  def y_max
+    @lines.size - Curses.lines + 2
+  end
+
   def y=(y)
-    if y > (line = @lines.size - (Curses.lines-1))
-      @y = line
+    if y > (ym = self.y_max)
+      @y = ym
     else
       @y = y
     end
 
     @y = 0 if @y < 0
     @yq << nil if @loading
-  end
-  def y_max
-    @lines.size - Curses.lines + 1
   end
 
   def init_screen
@@ -100,7 +101,15 @@ class KV_Screen
     (lines-1).times{|i|
       lno = i + self.y
       line = @lines[lno]
-      break unless line
+
+      unless line
+        if lno == @lines.size
+          Curses.setpos i, 0
+          Curses.addstr '(END)'
+        end
+        break
+      end
+
       Curses.setpos i, 0
 
       if @line_mode
@@ -121,6 +130,7 @@ class KV_Screen
         }
       end
     }
+    
   end
 
   def render_status
