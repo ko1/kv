@@ -29,17 +29,17 @@ class KV_Screen
     @loading = true
     @buffer_lines = 10_000
     @yq = Queue.new
+    @load_unlimited = false
 
     @reader_thread = Thread.new{
       while line = input.gets
         @lines << line.chomp
-        while @lines.size > @y + @buffer_lines
+        while !@load_unlimited && @lines.size > @y + @buffer_lines
           @yq.pop; @yq.clear
         end
         @yq.clear
       end
       @loading = false
-      @yq = nil
     }
     sleep 0.001
     init_screen
@@ -54,7 +54,10 @@ class KV_Screen
     end
 
     @y = 0 if @y < 0
-    @yq << nil if @yq
+    @yq << nil if @loading
+  end
+  def y_max
+    @lines.size - Curses.lines + 1
   end
 
   def init_screen
@@ -76,10 +79,9 @@ class KV_Screen
     Curses.standend
   end
 
-  def screen_status str, post = nil
+  def screen_status status, post = nil
     Curses.setpos Curses.lines-1, 0
     Curses.addstr ' '.ljust(Curses.cols)
-    status = "STATUS: #{str}"
 
     standout{
       Curses.setpos Curses.lines-1, 0
@@ -122,9 +124,9 @@ class KV_Screen
 
   def render_status
     mouse  = @mouse ? ' [MOUSE]' : ''
-    search = @search ? " s:#{@search}" : ''
+    search = @search ? " search[#{@search.instance_variable_get(:@search_str)}]" : ''
     loading = @loading ? " (loading) " : ''
-    screen_status "lines:#{@lines.size}#{loading}#{search}#{mouse} $ "
+    screen_status "lines:#{self.y+1}/#{@lines.size}#{loading}#{search}#{mouse}"
   end
 
   def render_screen
@@ -197,7 +199,7 @@ class KV_Screen
     when 'g'
       self.y = 0
     when 'G'
-      self.y = @lines.size - Curses.lines + 1
+      self.y = self.y_max
     when ' ', Curses::KEY_NPAGE
       self.y += Curses.lines-1
     when Curses::KEY_PPAGE
@@ -209,6 +211,33 @@ class KV_Screen
       if ystr && !ystr.empty?
         self.y = ystr.to_i - 1
       end
+
+    when 'F'
+      ev = nil
+      begin
+        Curses.timeout = 0.5
+        while @loading && !(ev = render_screen)
+          self.y = self.y_max
+        end
+      ensure
+        Curses.timeout = -1
+      end
+      Curses.ungetch ev if ev
+
+    when 'L'
+      ev = nil
+      begin
+        Curses.timeout = 0.5
+        @load_unlimited = true
+        @yq << true if @loading
+        while @loading && !(ev = Curses.getch)
+          render_status
+        end
+      ensure
+        @load_unlimited = false
+        Curses.timeout = -1
+      end
+      Curses.ungetch ev if ev
 
     when '/'
       search_str = ''.dup
@@ -245,7 +274,10 @@ class KV_Screen
       else
         @search = nil
       end
-      search_next self.y if @search
+      if @search
+        @search.instance_variable_set(:@search_str, search_str)
+        search_next self.y
+      end
     when 'n'
       search_next self.y+1 if @search
     when 'p'
@@ -318,7 +350,20 @@ class KV_Screen
 end
 
 def help_io
-  help_io = StringIO.new(File.read(File.join(__dir__, '../COMMAND')))
+  readme = File.read(File.join(__dir__, '../README.md'))
+  help = []
+  readme.each_line{|line|
+    if /kv: A pager by Ruby Command list/ =~ line
+      help << line
+    elsif /^```/ =~ line && !help.empty?
+      break
+    elsif !help.empty?
+      p line
+      help << line
+    end
+  }
+
+  help_io = StringIO.new(help.join)
 end
 
 class KV
