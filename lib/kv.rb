@@ -247,9 +247,9 @@ class KV_Screen
     when 'G'
       self.y = self.y_max
       self.x = 0
-    when ' ', Curses::KEY_NPAGE
+    when ' ', Curses::KEY_NPAGE, Curses::KEY_CTRL_D
       self.y += Curses.lines-1
-    when Curses::KEY_PPAGE
+    when Curses::KEY_PPAGE, Curses::KEY_CTRL_U
       self.y -= Curses.lines-1
 
     when /[0-9]/
@@ -262,9 +262,15 @@ class KV_Screen
     when 'F'
       ev = nil
       begin
-        Curses.timeout = 0.5
-        while @loading && !(ev = render_screen)
-          self.y = self.y_max
+        Curses.timeout = 100 # 0.1 sec
+        last_y_max = self.y = self.y_max
+        ev = render_screen
+
+        while @loading && !ev
+          if last_y_max < self.y_max
+            last_y_max = self.y = self.y_max
+            ev = render_screen
+          end
         end
       ensure
         Curses.timeout = -1

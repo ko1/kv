@@ -34,8 +34,10 @@ kv: A pager by Ruby Command list
   q: quit
 
   # Moving
-  k, j, [UP], [DOWN],
-  [PAGE UP], [PAGE DOWN], [SPACE]: move cursor
+  k, j, [UP], [DOWN]: move cursor (y)
+  h, l, [LEFT], [RIGTH]: move cursor (x)
+  Ctrl-U, [PAGE UP]: page up
+  Ctrl-D, [PAGE DOWN], [SPACE]: page down
   g: Goto first line
   G: Goto last line (current last line)
   \d+: Goto specified line
