@@ -35,14 +35,15 @@ kv: A pager by Ruby Command list
   \d+: Goto specified line
 
   # Loading
+  You can load a huge file or infinite input from a pipe.
   10,000 lines ahead current line will be loaded.
-  If you want to load more lines, the follwoing commands
+  If you want to load further lines, the follwoing commands
   will help you.
 
   F: Load remaining data and scroll forward
   L: Load reamining data but no scroll
-  Pushing any keys stop loading
 
+  Pushing any keys stops loading.
 
   # Searching
   /: search
@@ -64,11 +65,15 @@ kv: A pager by Ruby Command list
 
 `G` is notable feature, `less` doesn't have. This feature jumps to "current" last line even if the pipe source command does not close output (== input for kv). You can refresh the last line by putting any command.
 
-# Mouse mode
+## Mouse mode
 
 Not yet.
 
-# Terminal (REPL) mode
+## Terminal (REPL) mode
 
 Not yet.
+
+# Credit
+
+Created by Koichi Sasada at 2020.
 

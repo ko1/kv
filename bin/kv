@@ -358,7 +358,6 @@ def help_io
     elsif /^```/ =~ line && !help.empty?
       break
     elsif !help.empty?
-      p line
       help << line
     end
   }
