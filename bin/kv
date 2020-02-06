@@ -1,4 +1,5 @@
 #! /usr/bin/env ruby
+# frozen_string_literal: true
 
 require "curses"
 require 'stringio'
@@ -23,6 +24,8 @@ class KV_Screen
 
     @mouse = false
     @search = nil
+    @search_ignore_case = false
+    @search_regexp = true
     @loading = true
     @buffer_lines = 10_000
     @yq = Queue.new
@@ -158,7 +161,7 @@ class KV_Screen
     ev
   end
 
-  def input_str pattern, str = ''
+  def input_str pattern, str = ''.dup, other_actions: nil
     loop{
       ev = Curses.getch
 
@@ -170,8 +173,12 @@ class KV_Screen
       when pattern
         str << ev
       else
-        log "failure: #{key_name ev}"
-        return nil
+        if other_actions && (action = other_actions[ev])
+          action.call(ev)
+        else
+          log "failure: #{key_name ev}"
+          return nil
+        end
       end
     }
   end
@@ -204,14 +211,41 @@ class KV_Screen
       end
 
     when '/'
-      screen_status "Search:"
-      search = input_str(/./)
-      if search && !search.empty?
-        @search = search
-        search_next self.y
+      search_str = ''.dup
+
+      update_search_status = -> do
+        regexp = @search_regexp ? 'regexp' : 'string'
+        ignore = @search_ignore_case ? '/ignore' : ''
+        screen_status "Search[#{regexp}#{ignore}]:", search_str
+      end
+
+      update_search_status[]
+      input_str(/./, search_str, other_actions: {
+        Curses::KEY_CTRL_I => -> ev do
+          @search_ignore_case = !@search_ignore_case
+          update_search_status[]
+        end,
+        Curses::KEY_CTRL_R => -> ev do
+          @search_regexp = !@search_regexp
+          update_search_status[]
+        end,
+      })
+
+      if search_str && !search_str.empty?
+        ic = @search_ignore_case ? [Regexp::IGNORECASE] : []
+        if @search_regexp
+          begin
+            @search = Regexp.compile(search_str, *ic)
+          rescue RegexpError
+            @search = nil
+          end
+        else
+          @search = Regexp.compile(Regexp.escape(search_str), *ic)
+        end
       else
         @search = nil
       end
+      search_next self.y if @search
     when 'n'
       search_next self.y+1 if @search
     when 'p'

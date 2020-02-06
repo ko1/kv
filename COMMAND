@@ -10,6 +10,10 @@ kv: A pager by Ruby Command list
   \d+: Goto specified line
 
   /: search
+    When you enter a search string, you can choose
+    the following mode by Control key combination:
+      Ctrl-R: toggle Regexp mode (Ruby's regexp)
+      Ctrl-I: toggle ignore case mode
   n: search next
   p: search preview
 
@@ -18,4 +22,3 @@ kv: A pager by Ruby Command list
   N: toggle line mode
   m: toggle mouse mode
   t: terminal (REPL) mode
-
