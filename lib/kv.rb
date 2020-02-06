@@ -16,24 +16,26 @@ class KV_PopScreen < Exception
 end
 
 class KV_Screen
-  def initialize input
+  def initialize input, lines: [], search: nil, name: nil
     @y = 0
     @x = 0
-    @lines  = []
-    @status_line = ''
+    @name = name
+    @lines = lines
     @mode = :screen
     @line_mode = true
 
     @mouse = false
-    @search = nil
+    @search = search
     @search_ignore_case = false
     @search_regexp = true
-    @loading = true
+    @loading = false
     @buffer_lines = 10_000
     @yq = Queue.new
     @load_unlimited = false
 
     @reader_thread = Thread.new{
+      @loading = true
+
       while line = input.gets
         @lines << line.chomp
         while !@load_unlimited && @lines.size > @y + @buffer_lines
@@ -41,8 +43,10 @@ class KV_Screen
         end
         @yq.clear
       end
+
       @loading = false
-    }
+    } if input
+
     sleep 0.001
     init_screen
   end
@@ -163,11 +167,12 @@ class KV_Screen
   end
 
   def render_status
+    name = @name ? "<#{@name}>" : ''
     mouse  = @mouse ? ' [MOUSE]' : ''
     search = @search ? " search[#{@search.instance_variable_get(:@search_str)}]" : ''
     loading = @loading ? " (loading) " : ''
     x = @x > 0 ? " x:#{@x}" : ''
-    screen_status "lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
+    screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
 
   def render_screen
@@ -335,6 +340,11 @@ class KV_Screen
       search_next self.y+1 if @search
     when 'p'
       search_prev self.y-1 if @search
+    when 'f'
+      if @search
+        fscr = KV_Screen.new nil, lines: @lines.grep(@search), search: @search, name: '[filter mode]'
+        raise KV_PushScreen.new(fscr)
+      end
 
     when 's'
       screen_status "Save file:"
@@ -407,18 +417,20 @@ class KV
     if files.empty?
       if STDIN.isatty
         input = help_io
+        name = 'HELP'
       else
         input = STDIN.dup
         STDIN.reopen('/dev/tty')
         trap(:INT){
           log "SIGINT"
         }
+        name = nil
       end
     else
-      input = open(ARGV.shift)
+      input = open(name = ARGV.shift)
     end
 
-    @screens = [KV_Screen.new(input)]
+    @screens = [KV_Screen.new(input, name: name)]
   end
 
   def control

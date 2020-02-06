@@ -61,6 +61,7 @@ kv: A pager by Ruby Command list
       Ctrl-I: toggle ignore case mode
   n: search next
   p: search preview
+  f: filter mode (show only matched lines)
 
   # Output
   s: Save screen buffer to file
