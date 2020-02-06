@@ -18,6 +18,7 @@ end
 class KV_Screen
   def initialize input
     @y = 0
+    @x = 0
     @lines  = []
     @status_line = ''
     @mode = :screen
@@ -62,6 +63,13 @@ class KV_Screen
     @yq << nil if @loading
   end
 
+  attr_reader :x
+
+  def x=(x)
+    @x = x
+    @x = 0 if @x < 0
+  end
+
   def init_screen
     Curses.init_screen
     Curses.stdscr.keypad(true)
@@ -81,6 +89,15 @@ class KV_Screen
     Curses.standend
   end
 
+  def cattr attr
+    Curses.attron attr
+    begin
+      yield
+    ensure
+      Curses.attroff attr
+    end
+  end
+
   def screen_status status, post = nil
     Curses.setpos Curses.lines-1, 0
     Curses.addstr ' '.ljust(Curses.cols)
@@ -93,19 +110,25 @@ class KV_Screen
     Curses.standend
   end
 
+  LINE_ATTR = Curses::A_DIM
+
   def render_data
     Curses.clear
-    lines = Curses.lines
-    cols  = Curses.cols
 
-    (lines-1).times{|i|
+    c_lines = Curses.lines
+    c_cols  = Curses.cols
+
+    (c_lines-1).times{|i|
       lno = i + self.y
       line = @lines[lno]
+      cols = c_cols
 
       unless line
         if lno == @lines.size
           Curses.setpos i, 0
-          Curses.addstr '(END)'
+          cattr LINE_ATTR do
+            Curses.addstr '(END)'
+          end
         end
         break
       end
@@ -113,8 +136,14 @@ class KV_Screen
       Curses.setpos i, 0
 
       if @line_mode
-        Curses.addstr('%4d | ' % (lno+1))
+        cattr LINE_ATTR do
+          ln_str = '%5d |' % (lno+1)
+          Curses.addstr(ln_str)
+          cols -= ln_str.size
+        end
       end
+
+      line = line[@x, cols] || ''
 
       if !@search
         Curses.addstr line
@@ -137,7 +166,8 @@ class KV_Screen
     mouse  = @mouse ? ' [MOUSE]' : ''
     search = @search ? " search[#{@search.instance_variable_get(:@search_str)}]" : ''
     loading = @loading ? " (loading) " : ''
-    screen_status "lines:#{self.y+1}/#{@lines.size}#{loading}#{search}#{mouse}"
+    x = @x > 0 ? " x:#{@x}" : ''
+    screen_status "lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
 
   def render_screen
@@ -207,10 +237,16 @@ class KV_Screen
       self.y -= 1
     when Curses::KEY_DOWN, 'j'
       self.y += 1
+    when Curses::KEY_LEFT, 'h'
+      self.x -= 1
+    when Curses::KEY_RIGHT, 'l'
+      self.x += 1
     when 'g'
       self.y = 0
+      self.x = 0
     when 'G'
       self.y = self.y_max
+      self.x = 0
     when ' ', Curses::KEY_NPAGE
       self.y += Curses.lines-1
     when Curses::KEY_PPAGE
@@ -409,6 +445,7 @@ def partition str, search
   results = []
   loop{
     r = str.match(search){|m|
+      break if m.post_match == str
       results << [:unmatch, m.pre_match]
       results << [:match, m.to_s]
       str = m.post_match
