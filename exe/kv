@@ -1,0 +1,11 @@
+#! /usr/bin/env ruby
+
+begin
+  require 'kv'
+rescue LoadError
+  $:.unshift File.join(__dir__, '../lib')
+  require 'kv'
+end
+
+kv = KV::KV.new ARGV
+kv.control

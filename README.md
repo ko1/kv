@@ -2,6 +2,12 @@
 
 kv is a page viewer designed for streaming data written by Ruby.
 
+## Installation
+
+Install it yourself as:
+
+    $ gem install kv
+
 # Usage
 
 kv requires Ruby and curses gem.
@@ -72,6 +78,10 @@ Not yet.
 ## Terminal (REPL) mode
 
 Not yet.
+
+# Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/ko1/kv.
 
 # Credit
 
