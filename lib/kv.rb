@@ -3,6 +3,7 @@
 require "kv/version"
 require "curses"
 require 'stringio'
+require 'optparse'
 
 module KV
 class KV_PushScreen < Exception
@@ -16,13 +17,16 @@ class KV_PopScreen < Exception
 end
 
 class KV_Screen
-  def initialize input, lines: [], search: nil, name: nil
+  def initialize input, lines: [], search: nil, name: nil, following_mode: false
     @y = 0
     @x = 0
+    @lineno = 0
     @name = name
+    @filename = @name if @name && File.exist?(@name)
     @lines = lines
     @mode = :screen
     @line_mode = true
+    @following_mode = following_mode
 
     @mouse = false
     @search = search
@@ -32,25 +36,33 @@ class KV_Screen
     @buffer_lines = 10_000
     @yq = Queue.new
     @load_unlimited = false
+    @prev_render = {}
 
-    @reader_thread = Thread.new{
-      @loading = true
+    read_async input if input
 
-      lineno = 0
+    sleep 0.001
+  end
+
+  def read_async input
+    @loading = true
+    @reader_thread = Thread.new do
       while line = input.gets
         line = line.chomp
-        line.instance_variable_set(:@lineno, lineno += 1)
+        line.instance_variable_set(:@lineno, @lineno += 1)
         @lines << line
         while !@load_unlimited && @lines.size > @y + @buffer_lines
           @yq.pop; @yq.clear
         end
         @yq.clear
       end
-
+    ensure
+      if @filename
+        @file_mtime = File.mtime(@filename)
+        @file_lastpos = input.tell
+      end
+      input.close
       @loading = false
-    } if input
-
-    sleep 0.001
+    end
   end
 
   attr_reader :y
@@ -104,6 +116,15 @@ class KV_Screen
     end
   end
 
+  def ctimeout ms
+    Curses.timeout = ms
+    begin
+      yield
+    ensure
+      Curses.timeout = -1
+    end
+  end
+
   def screen_status status, post = nil
     Curses.setpos Curses.lines-1, 0
     Curses.addstr ' '.ljust(Curses.cols)
@@ -119,12 +140,25 @@ class KV_Screen
   LINE_ATTR = Curses::A_DIM
 
   def render_data
-    
-    Curses.clear
-
+    # check update
     c_lines = Curses.lines
     c_cols  = Curses.cols
 
+    if c_cols != @prev_render[:c_cols] ||
+       c_lines != @prev_render[:c_lines] ||
+       @y != @prev_render[:y] ||
+       @x != @prev_render[:x] ||
+       @search != @prev_render[:search] ||
+       @line_mode != @prev_render[:line_mode] ||
+       (!@prev_render[:render_full] && @lines.size != @prev_render[:lines_size])
+      # OK
+    else
+      return
+    end
+
+    Curses.clear
+
+    render_full = :not_full !=
     (c_lines-1).times{|i|
       lno = i + self.y
       line = @lines[lno]
@@ -137,7 +171,7 @@ class KV_Screen
             Curses.addstr '(END)'
           end
         end
-        break
+        break :not_full
       end
 
       Curses.setpos i, 0
@@ -166,6 +200,10 @@ class KV_Screen
         }
       end
     }
+
+    @prev_render = {c_cols: c_cols, c_lines: c_lines, x: @x, y: @y,
+                    search: @search, line_mode: @line_mode,
+                    render_full: render_full, lines_size: @lines.size}
   end
 
   def search_str
@@ -180,15 +218,48 @@ class KV_Screen
     name = @name ? "<#{@name}>" : ''
     mouse  = @mouse ? ' [MOUSE]' : ''
     search = @search ? " search[#{search_str}]" : ''
-    loading = @loading ? " (loading) " : ''
+    loading = @loading ? " (loading...#{@load_unlimited ? '!' : nil}#{@following_mode ? ' following' : ''}) " : ''
     x = @x > 0 ? " x:#{@x}" : ''
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
 
+  def check_update
+    if @loading == false
+      if @filename && File.exist?(@filename) && File.mtime(@filename) > @file_mtime
+        input = open(@filename)
+
+        if input.size < @file_lastpos
+          screen_status "#{@filename} is truncated. Rewinded."
+          pause
+          @lineno = 0
+        else
+          input.seek @file_lastpos
+        end
+        read_async input
+      end
+    end
+  end
+
   def render_screen
-    render_data
-    render_status
-    Curses.getch
+    ev = nil
+
+    ms = @following_mode ? 100 : 500
+
+    ctimeout ms do
+      while ev == nil
+        render_data
+        render_status
+        ev = Curses.getch
+        check_update
+        self.y = self.y_max if @following_mode
+      end
+
+      if @following_mode
+        @following_mode = false
+        @load_unlimited = false
+      end
+      return ev
+    end
   end
 
   def search_next start
@@ -282,37 +353,13 @@ class KV_Screen
       end
 
     when 'F'
-      ev = nil
-      begin
-        Curses.timeout = 100 # 0.1 sec
-        last_y_max = self.y = self.y_max
-        ev = render_screen
-
-        while @loading && !ev
-          if last_y_max < self.y_max
-            last_y_max = self.y = self.y_max
-            ev = render_screen
-          end
-        end
-      ensure
-        Curses.timeout = -1
-      end
-      Curses.ungetch ev if ev
+      @following_mode = true
+      @load_unlimited = true
+      @yq << true
 
     when 'L'
-      ev = nil
-      begin
-        Curses.timeout = 0.5
-        @load_unlimited = true
-        @yq << true if @loading
-        while @loading && !(ev = Curses.getch)
-          render_status
-        end
-      ensure
-        @load_unlimited = false
-        Curses.timeout = -1
-      end
-      Curses.ungetch ev if ev
+      @load_unlimited = !@load_unlimited
+      @yq << true
 
     when '/'
       search_str = ''.dup
@@ -340,8 +387,10 @@ class KV_Screen
         if @search_regexp
           begin
             @search = Regexp.compile(search_str, *ic)
-          rescue RegexpError
+          rescue RegexpError => e
             @search = nil
+            screen_status "regexp compile error: #{e.message}"
+            pause
           end
         else
           @search = Regexp.compile(Regexp.escape(search_str), *ic)
@@ -408,7 +457,8 @@ class KV_Screen
       raise KV_PushScreen.new(KV_Screen.new help_io)
 
     else
-      log key_name(ev), 'screen input: '
+      screen_status "unknown: #{key_name(ev)}"
+      pause
     end
   end
 
@@ -432,7 +482,13 @@ class KV_Screen
 end
 
 class KV
-  def initialize files
+  def initialize argv
+    @following_mode = false
+
+    files = parse_option(argv)
+
+    @pipe_in = nil
+
     if files.empty?
       if STDIN.isatty
         input = help_io
@@ -444,12 +500,21 @@ class KV
           log "SIGINT"
         }
         name = nil
+        @pipe_in = input
       end
     else
       input = open(name = ARGV.shift)
     end
 
-    @screens = [KV_Screen.new(input, name: name)]
+    @screens = [KV_Screen.new(input, name: name, following_mode: @following_mode)]
+  end
+
+  def parse_option argv
+    opts = OptionParser.new
+    opts.on('-f'){
+      @following_mode = true
+    }
+    opts.parse!(argv)
   end
 
   def control

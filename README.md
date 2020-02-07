@@ -19,7 +19,9 @@ View help
 $ kv
 
 View [FILE]
-$ kv [FILE]
+$ kv [-f] [FILE]
+
+[-f] option is similar to "tail -f".
 
 View [CMD] output
 $ [CMD] | kv
@@ -48,10 +50,11 @@ kv: A pager by Ruby Command list
   If you want to load further lines, the follwoing commands
   will help you.
 
-  F: Load remaining data and scroll forward
-  L: Load reamining data but no scroll
+  F: Load remaining data or monitor a specified file
+     and scroll forward
+     Pushing any keys stops loading
 
-  Pushing any keys stops loading.
+  L: Toggle unlimited input mode
 
   # Searching
   /: search
