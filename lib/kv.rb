@@ -36,8 +36,11 @@ class KV_Screen
     @reader_thread = Thread.new{
       @loading = true
 
+      lineno = 0
       while line = input.gets
-        @lines << line.chomp
+        line = line.chomp
+        line.instance_variable_set(:@lineno, lineno += 1)
+        @lines << line
         while !@load_unlimited && @lines.size > @y + @buffer_lines
           @yq.pop; @yq.clear
         end
@@ -48,7 +51,6 @@ class KV_Screen
     } if input
 
     sleep 0.001
-    init_screen
   end
 
   attr_reader :y
@@ -117,6 +119,7 @@ class KV_Screen
   LINE_ATTR = Curses::A_DIM
 
   def render_data
+    
     Curses.clear
 
     c_lines = Curses.lines
@@ -141,7 +144,7 @@ class KV_Screen
 
       if @line_mode
         cattr LINE_ATTR do
-          ln_str = '%5d |' % (lno+1)
+          ln_str = '%5d |' % line.instance_variable_get(:@lineno)
           Curses.addstr(ln_str)
           cols -= ln_str.size
         end
@@ -163,13 +166,20 @@ class KV_Screen
         }
       end
     }
-    
+  end
+
+  def search_str
+    if @search
+      @search.instance_variable_get(:@search_str)
+    else
+      nil
+    end
   end
 
   def render_status
     name = @name ? "<#{@name}>" : ''
     mouse  = @mouse ? ' [MOUSE]' : ''
-    search = @search ? " search[#{@search.instance_variable_get(:@search_str)}]" : ''
+    search = @search ? " search[#{search_str}]" : ''
     loading = @loading ? " (loading) " : ''
     x = @x > 0 ? " x:#{@x}" : ''
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
@@ -189,7 +199,8 @@ class KV_Screen
         return true
       end
     }
-    return false
+    screen_status "not found: [#{self.search_str}]"
+    pause
   end
 
   def search_prev start
@@ -199,7 +210,8 @@ class KV_Screen
         return true
       end
     }
-    return false
+    screen_status "not found: [#{self.search_str}]"
+    pause
   end
 
   def key_name ev
@@ -229,6 +241,11 @@ class KV_Screen
         end
       end
     }
+  end
+
+  def pause
+    ev = Curses.getch
+    Curses.ungetch ev if ev
   end
 
   def control_screen
@@ -342,8 +359,12 @@ class KV_Screen
       search_prev self.y-1 if @search
     when 'f'
       if @search
-        fscr = KV_Screen.new nil, lines: @lines.grep(@search), search: @search, name: '[filter mode]'
-        raise KV_PushScreen.new(fscr)
+        filter_mode_title = "*filter mode [#{self.search_str}]*"
+        if @name != filter_mode_title
+          lines = @lines.grep(@search)
+          fscr = KV_Screen.new nil, lines: lines, search: @search, name: filter_mode_title
+          raise KV_PushScreen.new(fscr)
+        end
       end
 
     when 's'
@@ -392,12 +413,10 @@ class KV_Screen
   end
 
   def control_terminal
-    print '$ '
-    ev = gets
-    if ev[0] == 's'
-      @mode = :screen
-      init_screen
-    end
+    binding.irb
+
+    @mode = :screen
+    init_screen
   end
 
   def control
@@ -434,6 +453,7 @@ class KV
   end
 
   def control
+    @screens.last.init_screen
     until @screens.empty?
       begin
         @screens.last.control
@@ -444,6 +464,7 @@ class KV
       end
     end
   ensure
+    Curses.close_screen
     log "terminate"
   end
 end
