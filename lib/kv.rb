@@ -61,11 +61,14 @@ class KV_Screen
   def read_async input
     @loading = true
     data = input.read_nonblock(4096)
-    log data: data
 
     lines = data.each_line.to_a
-    last_line = lines.each{|line|
-      break line if line[-1] != "\n"
+    last_line = nil
+    lines.each{|line|
+      if line[-1] != "\n"
+        last_line = line
+        break
+      end
       @lines << setup_line(line)
     }
 
@@ -188,7 +191,6 @@ class KV_Screen
 
     Curses.clear
 
-    render_full = :not_full !=
     (c_lines-1).times{|i|
       lno = i + self.y
       line = @lines[lno]
@@ -201,7 +203,8 @@ class KV_Screen
             Curses.addstr '(END)'
           end
         end
-        break :not_full
+
+        break
       end
 
       Curses.setpos i, 0
@@ -210,7 +213,7 @@ class KV_Screen
         cattr LINE_ATTR do
           lineno = line.instance_variable_get(:@lineno)
           ln_str = '%5d |' % lineno
-          if @rs.goto == lineno - 1
+          if @rs.goto == lineno - 1 || (@rs.search && (@rs.search === line))
             standout do
               Curses.addstr(ln_str)
             end
@@ -303,8 +306,7 @@ class KV_Screen
 
   def search_next_move start
     (start...@lines.size).each{|i|
-      line = @lines[i]
-      if @lines[i].match(@rs.search)
+      if @rs.search === @lines[i]
         self.y = i
         return true
       end
@@ -323,7 +325,7 @@ class KV_Screen
 
   def search_prev start
     start.downto(0){|i|
-      if @lines[i].match(@rs.search)
+      if @rs.search === @lines[i]
         self.y = i
         return true
       end
@@ -618,7 +620,7 @@ $debug_log = ENV['KV_DEBUG']
 def log obj, prefix = ''
   if $debug_log
     File.open($debug_log, 'a'){|f|
-      f.puts "#{prefix}#{obj.class}: #{obj.inspect}"
+      f.puts "#{$$} #{prefix}#{obj.inspect}"
     }
   end
 end
