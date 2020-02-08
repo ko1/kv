@@ -70,11 +70,10 @@ class KV_Screen
 
   def read_async input
     @loading = true
-    data = input.read_nonblock(4096)
+    data = input.read_nonblock(4096 * 10)
 
-    lines = data.each_line.to_a
     last_line = nil
-    lines.each{|line|
+    data.each_line{|line|
       if line[-1] != "\n"
         last_line = line
         break
