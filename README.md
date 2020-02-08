@@ -15,16 +15,18 @@ kv requires Ruby and curses gem.
 ## Use kv
 
 ```
-View help
+# View [FILE]
+$ kv [OPTIONS] [FILE]
+
+# View results of [CMD]
+$ [CMD] | kv [OPTIONS]
+
+# View command help
 $ kv
 
-View [FILE]
-$ kv [-f] [FILE]
-
-[-f] option is similar to "tail -f".
-
-View [CMD] output
-$ [CMD] | kv
+Options:
+    -f                               following mode like "tail -f"
+    -n, --line-number LINE           goto LINE
 ```
 
 ## Command on a pager
@@ -47,12 +49,12 @@ kv: A pager by Ruby Command list
   # Loading
   You can load a huge file or infinite input from a pipe.
   10,000 lines ahead current line will be loaded.
-  If you want to load further lines, the follwoing commands
-  will help you.
+  If you want to load further lines the follwoing commands will help you.
 
-  F: Load remaining data or monitor a specified file
-     and scroll forward
-     Pushing any keys stops loading
+  F: Load remaining data or monitor a specified file and scroll forward.
+     Pushing any keys stops loading.
+     If search words (specified by commadn "/") are specified, 
+     stop if the further input lines contains the search words.
 
   L: Toggle unlimited input mode
 
@@ -73,6 +75,7 @@ kv: A pager by Ruby Command list
   N: toggle line mode
   m: toggle mouse mode
   t: terminal (REPL) mode
+  v: vi ("vi filename +[LINE]")
 ```
 
 `G` is notable feature, `less` doesn't have. This feature jumps to "current" last line even if the pipe source command does not close output (== input for kv). You can refresh the last line by putting any command.

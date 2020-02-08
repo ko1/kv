@@ -17,19 +17,29 @@ class KV_PopScreen < Exception
 end
 
 class KV_Screen
-  def initialize input, lines: [], search: nil, name: nil, following_mode: false
-    @y = 0
-    @x = 0
-    @lineno = 0
+  RenderStatus = Struct.new(
+    :c_cols, :c_lines, :x, :y,
+    :search, :goto, :line_mode, :render_full, :last_lineno)
+
+  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0
+    @rs = RenderStatus.new
+    @last_rs = nil
+    @rs.y = first_line
+    @rs.goto = first_line if first_line > 0
+    @rs.x = 0
+    @rs.last_lineno = 0
+    @rs.line_mode = true
+    @rs.search = search
+
     @name = name
     @filename = @name if @name && File.exist?(@name)
+
     @lines = lines
     @mode = :screen
-    @line_mode = true
+
     @following_mode = following_mode
 
     @mouse = false
-    @search = search
     @search_ignore_case = false
     @search_regexp = true
     @loading = false
@@ -39,18 +49,34 @@ class KV_Screen
     @prev_render = {}
 
     read_async input if input
+  end
 
-    sleep 0.001
+  def setup_line line
+    line = line.chomp
+    line.instance_variable_set(:@lineno, @rs.last_lineno += 1)
+    line
   end
 
   def read_async input
     @loading = true
+    data = input.read_nonblock(4096)
+
+    lines = data.each_line.to_a
+    last_line = lines.pop
+    lines.each{|line|
+      @lines << setup_line(line)
+    }
+
+    Thread.abort_on_exception = true
     @reader_thread = Thread.new do
       while line = input.gets
-        line = line.chomp
-        line.instance_variable_set(:@lineno, @lineno += 1)
-        @lines << line
-        while !@load_unlimited && @lines.size > @y + @buffer_lines
+        if last_line
+          line = last_line + line
+          last_line = nil
+        end
+
+        @lines << setup_line(line)
+        while !@load_unlimited && @lines.size > self.y + @buffer_lines
           @yq.pop; @yq.clear
         end
         @yq.clear
@@ -65,27 +91,34 @@ class KV_Screen
     end
   end
 
-  attr_reader :y
   def y_max
     @lines.size - Curses.lines + 2
   end
 
+  def y
+    @rs.y
+  end
+
   def y=(y)
     if y > (ym = self.y_max)
-      @y = ym
+      @rs.y = ym
     else
-      @y = y
+      @rs.y = y
     end
 
-    @y = 0 if @y < 0
+    @rs.y = 0 if @rs.y < 0
     @yq << nil if @loading
   end
 
   attr_reader :x
 
   def x=(x)
-    @x = x
-    @x = 0 if @x < 0
+    @rs.x = x
+    @rs.x = 0 if @rs.x < 0
+  end
+
+  def x
+    @rs.x
   end
 
   def init_screen
@@ -98,6 +131,7 @@ class KV_Screen
     else
       Curses.mousemask(0)
     end
+    self.y = @rs.y
   end
 
   
@@ -144,14 +178,8 @@ class KV_Screen
     c_lines = Curses.lines
     c_cols  = Curses.cols
 
-    if c_cols != @prev_render[:c_cols] ||
-       c_lines != @prev_render[:c_lines] ||
-       @y != @prev_render[:y] ||
-       @x != @prev_render[:x] ||
-       @search != @prev_render[:search] ||
-       @line_mode != @prev_render[:line_mode] ||
-       (!@prev_render[:render_full] && @lines.size != @prev_render[:lines_size])
-      # OK
+    if @rs != @last_rs
+      @last_rs = @rs.dup
     else
       return
     end
@@ -176,20 +204,27 @@ class KV_Screen
 
       Curses.setpos i, 0
 
-      if @line_mode
+      if @rs.line_mode
         cattr LINE_ATTR do
-          ln_str = '%5d |' % line.instance_variable_get(:@lineno)
-          Curses.addstr(ln_str)
+          lineno = line.instance_variable_get(:@lineno)
+          ln_str = '%5d |' % lineno
+          if @rs.goto == lineno - 1
+            standout do
+              Curses.addstr(ln_str)
+            end
+          else
+            Curses.addstr(ln_str)
+          end
           cols -= ln_str.size
         end
       end
 
-      line = line[@x, cols] || ''
+      line = line[self.x, cols] || ''
 
-      if !@search
+      if !@rs.search
         Curses.addstr line
       else
-        partition(line, @search).each{|(matched, str)|
+        partition(line, @rs.search).each{|(matched, str)|
           if matched == :match
             standout{
               Curses.addstr str
@@ -200,15 +235,11 @@ class KV_Screen
         }
       end
     }
-
-    @prev_render = {c_cols: c_cols, c_lines: c_lines, x: @x, y: @y,
-                    search: @search, line_mode: @line_mode,
-                    render_full: render_full, lines_size: @lines.size}
   end
 
   def search_str
-    if @search
-      @search.instance_variable_get(:@search_str)
+    if @rs.search
+      @rs.search.instance_variable_get(:@search_str)
     else
       nil
     end
@@ -217,9 +248,9 @@ class KV_Screen
   def render_status
     name = @name ? "<#{@name}>" : ''
     mouse  = @mouse ? ' [MOUSE]' : ''
-    search = @search ? " search[#{search_str}]" : ''
+    search = @rs.search ? " search[#{search_str}]" : ''
     loading = @loading ? " (loading...#{@load_unlimited ? '!' : nil}#{@following_mode ? ' following' : ''}) " : ''
-    x = @x > 0 ? " x:#{@x}" : ''
+    x = self.x > 0 ? " x:#{self.x}" : ''
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
 
@@ -251,32 +282,46 @@ class KV_Screen
         render_status
         ev = Curses.getch
         check_update
-        self.y = self.y_max if @following_mode
+        if @following_mode
+          if @rs.search && search_next_move(self.y + 1)
+            break
+          end
+          self.y = self.y_max
+        end
       end
 
       if @following_mode
         @following_mode = false
         @load_unlimited = false
       end
+
       return ev
     end
   end
 
-  def search_next start
+  def search_next_move start
     (start...@lines.size).each{|i|
       line = @lines[i]
-      if @lines[i].match(@search)
+      if @lines[i].match(@rs.search)
         self.y = i
         return true
       end
     }
-    screen_status "not found: [#{self.search_str}]"
-    pause
+    return false
+  end
+
+  def search_next start
+    if search_next_move start
+      # OK
+    else
+      screen_status "not found: [#{self.search_str}]"
+      pause
+    end
   end
 
   def search_prev start
     start.downto(0){|i|
-      if @lines[i].match(@search)
+      if @lines[i].match(@rs.search)
         self.y = i
         return true
       end
@@ -349,7 +394,8 @@ class KV_Screen
       screen_status "Goto:", ev
       ystr = input_str(/\d/, ev)
       if ystr && !ystr.empty?
-        self.y = ystr.to_i - 1
+        @rs.goto = ystr.to_i - 1
+        self.y = @rs.goto
       end
 
     when 'F'
@@ -386,32 +432,32 @@ class KV_Screen
         ic = @search_ignore_case ? [Regexp::IGNORECASE] : []
         if @search_regexp
           begin
-            @search = Regexp.compile(search_str, *ic)
+            @rs.search = Regexp.compile(search_str, *ic)
           rescue RegexpError => e
-            @search = nil
+            @rs.search = nil
             screen_status "regexp compile error: #{e.message}"
             pause
           end
         else
-          @search = Regexp.compile(Regexp.escape(search_str), *ic)
+          @rs.search = Regexp.compile(Regexp.escape(search_str), *ic)
         end
       else
-        @search = nil
+        @rs.search = nil
       end
-      if @search
-        @search.instance_variable_set(:@search_str, search_str)
+      if @rs.search
+        @rs.search.instance_variable_set(:@search_str, search_str)
         search_next self.y
       end
     when 'n'
-      search_next self.y+1 if @search
+      search_next self.y+1 if @rs.search
     when 'p'
-      search_prev self.y-1 if @search
+      search_prev self.y-1 if @rs.search
     when 'f'
-      if @search
+      if @rs.search
         filter_mode_title = "*filter mode [#{self.search_str}]*"
         if @name != filter_mode_title
-          lines = @lines.grep(@search)
-          fscr = KV_Screen.new nil, lines: lines, search: @search, name: filter_mode_title
+          lines = @lines.grep(@rs.search)
+          fscr = KV_Screen.new nil, lines: lines, search: @rs.search, name: filter_mode_title
           raise KV_PushScreen.new(fscr)
         end
       end
@@ -437,6 +483,12 @@ class KV_Screen
           # TODO: status line
         end
 
+    when 'v'
+      if @filename
+        system("vi #{@filename} +#{self.y + 1}")
+        @last_rs = nil
+      end
+
     when 'm'
       @mouse = !@mouse
       Curses.close_screen
@@ -448,13 +500,16 @@ class KV_Screen
       log @lines[self.y + m.y]
 
     when 'N'
-      @line_mode = !@line_mode
+      @rs.line_mode = !@rs.line_mode
     when 't'
       Curses.close_screen
       @mode = :terminal
 
     when '?'
       raise KV_PushScreen.new(KV_Screen.new help_io)
+
+    when nil
+      # ignore
 
     else
       screen_status "unknown: #{key_name(ev)}"
@@ -484,6 +539,7 @@ end
 class KV
   def initialize argv
     @following_mode = false
+    @first_line = 0
 
     files = parse_option(argv)
 
@@ -496,23 +552,37 @@ class KV
       else
         input = STDIN.dup
         STDIN.reopen('/dev/tty')
-        trap(:INT){
-          log "SIGINT"
-        }
         name = nil
         @pipe_in = input
       end
     else
-      input = open(name = ARGV.shift)
+      name = files.shift
+      begin
+        input = open(name)
+      rescue
+        if /(.+):(\d+)/ =~ name
+          name = $1
+          @first_line = $2.to_i - 1
+          retry
+        end
+        raise
+      end
     end
 
-    @screens = [KV_Screen.new(input, name: name, following_mode: @following_mode)]
+    trap(:INT){
+      log "SIGINT"
+    }
+
+    @screens = [KV_Screen.new(input, name: name, following_mode: @following_mode, first_line: @first_line)]
   end
 
   def parse_option argv
     opts = OptionParser.new
-    opts.on('-f'){
+    opts.on('-f', 'following mode like "tail -f"'){
       @following_mode = true
+    }
+    opts.on('-n', '--line-number LINE', 'goto LINE'){|n|
+      @first_line = n.to_i - 1
     }
     opts.parse!(argv)
   end
