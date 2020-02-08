@@ -38,10 +38,11 @@ kv: A pager by Ruby Command list
   q: quit
 
   # Moving
-  k, j, [UP], [DOWN]: move cursor (y)
-  h, l, [LEFT], [RIGTH]: move cursor (x)
-  Ctrl-U, [PAGE UP]: page up
+  k, j, [UP], [DOWN]:           move cursor (y)
+  h, l, [LEFT], [RIGTH]:        move cursor (x)
+  Ctrl-U, [PAGE UP]:            page up
   Ctrl-D, [PAGE DOWN], [SPACE]: page down
+
   g: Goto first line
   G: Goto last line (current last line)
   \d+: Goto specified line
@@ -53,8 +54,8 @@ kv: A pager by Ruby Command list
 
   F: Load remaining data or monitor a specified file and scroll forward.
      Pushing any keys stops loading.
-     If search words (specified by commadn "/") are specified, 
-     stop if the further input lines contains the search words.
+     If a search string (specified by commadn "/") is specified,
+     stop scroll if the further input lines contains the string.
 
   L: Toggle unlimited input mode
 
@@ -64,6 +65,7 @@ kv: A pager by Ruby Command list
     the following mode by Control key combination:
       Ctrl-R: toggle Regexp mode (Ruby's regexp)
       Ctrl-I: toggle ignore case mode
+    To clear search string, research with an empty string.
   n: search next
   p: search preview
   f: filter mode (show only matched lines)

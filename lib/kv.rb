@@ -19,16 +19,17 @@ end
 class KV_Screen
   RenderStatus = Struct.new(
     :c_cols, :c_lines, :x, :y,
-    :search, :goto, :line_mode, :render_full, :last_lineno)
+    :search, :goto, :line_mode, :render_full, :last_lineno
+  )
 
-  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0
+  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0, line_mode: false
     @rs = RenderStatus.new
     @last_rs = nil
     @rs.y = first_line
     @rs.goto = first_line if first_line > 0
     @rs.x = 0
     @rs.last_lineno = 0
-    @rs.line_mode = true
+    @rs.line_mode = line_mode
     @rs.search = search
 
     @name = name
@@ -60,10 +61,11 @@ class KV_Screen
   def read_async input
     @loading = true
     data = input.read_nonblock(4096)
+    log data: data
 
     lines = data.each_line.to_a
-    last_line = lines.pop
-    lines.each{|line|
+    last_line = lines.each{|line|
+      break line if line[-1] != "\n"
       @lines << setup_line(line)
     }
 
@@ -538,8 +540,11 @@ end
 
 class KV
   def initialize argv
-    @following_mode = false
-    @first_line = 0
+    @opts = {
+      following_mode: false,
+      first_line: 0,
+      line_mode: false,
+    }
 
     files = parse_option(argv)
 
@@ -573,16 +578,19 @@ class KV
       log "SIGINT"
     }
 
-    @screens = [KV_Screen.new(input, name: name, following_mode: @following_mode, first_line: @first_line)]
+    @screens = [KV_Screen.new(input, name: name, **@opts)]
   end
 
   def parse_option argv
     opts = OptionParser.new
     opts.on('-f', 'following mode like "tail -f"'){
-      @following_mode = true
+      @opts[:following_mode] = true
     }
     opts.on('-n', '--line-number LINE', 'goto LINE'){|n|
-      @first_line = n.to_i - 1
+      @opts[:first_line] = n.to_i - 1
+    }
+    opts.on('-N', 'Show lines'){
+      @opts[:line_mode] = true
     }
     opts.parse!(argv)
   end
