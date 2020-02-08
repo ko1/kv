@@ -51,7 +51,12 @@ class KV_Screen
     @loading = false
     @buffer_lines = 10_000
     @yq = Queue.new
-    @load_unlimited = false
+    if @filename
+      @load_unlimited = true
+    else
+      @load_unlimited = false
+    end
+
     @prev_render = {}
 
     read_async input if input
