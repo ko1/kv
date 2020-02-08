@@ -21,6 +21,11 @@ class KV_Screen
     :c_cols, :c_lines, :x, :y,
     :search, :goto, :line_mode, :render_full, :last_lineno
   )
+  class RenderStatus
+    def to_s
+      'kv'
+    end
+  end
 
   def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0, line_mode: false
     @rs = RenderStatus.new
@@ -226,7 +231,7 @@ class KV_Screen
 
       line = line[self.x, cols] || ''
 
-      if !@rs.search
+      if !@rs.search || !(Regexp === @rs.search)
         Curses.addstr line
       else
         partition(line, @rs.search).each{|(matched, str)|
@@ -244,7 +249,11 @@ class KV_Screen
 
   def search_str
     if @rs.search
-      @rs.search.instance_variable_get(:@search_str)
+      if str = @rs.search.instance_variable_get(:@search_str)
+        str
+      else
+        @rs.search.inspect
+      end
     else
       nil
     end
@@ -522,10 +531,11 @@ class KV_Screen
   end
 
   def control_terminal
-    binding.irb
+    @rs.instance_eval('binding').irb
 
     @mode = :screen
     init_screen
+    @last_rs = nil
   end
 
   def control
