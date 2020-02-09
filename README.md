@@ -1,6 +1,6 @@
 # kv: A page viewer written in Ruby
 
-kv is a page viewer designed for streaming data written by Ruby.
+kv is a page viewer designed for streaming data written in Ruby.
 
 ## Installation
 
