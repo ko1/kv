@@ -8,9 +8,9 @@ Install it yourself as:
 
     $ gem install kv
 
-# Usage
+kv requires recent Ruby and curses gem.
 
-kv requires Ruby and curses gem.
+# Usage
 
 ## Use kv
 
