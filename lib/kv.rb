@@ -18,8 +18,8 @@ end
 
 class KV_Screen
   RenderStatus = Struct.new(
-    :c_cols, :c_lines, :x, :y,
-    :search, :goto, :line_mode, :render_full, :last_lineno
+    :c_cols, :c_lines, :x, :y, :last_lineno,
+    :search, :goto, :line_mode, :wrapping,
   )
   class RenderStatus
     def to_s
@@ -36,6 +36,7 @@ class KV_Screen
     @rs.last_lineno = 0
     @rs.line_mode = line_mode
     @rs.search = search
+    @rs.wrapping = true
 
     @name = name
     @filename = @name if @name && File.exist?(@name)
@@ -44,6 +45,7 @@ class KV_Screen
     @mode = :screen
 
     @following_mode = following_mode
+    @searching = false
 
     @mouse = false
     @search_ignore_case = false
@@ -70,7 +72,11 @@ class KV_Screen
 
   def read_async input
     @loading = true
-    data = input.read_nonblock(4096 * 10)
+    begin
+      data = input.read_nonblock(4096)
+    rescue IO::EAGAINWaitReadable, EOFError
+      data = ''
+    end
 
     last_line = nil
     data.each_line{|line|
@@ -133,6 +139,11 @@ class KV_Screen
 
   def x
     @rs.x
+  end
+
+  def set_load_unlimited b
+    @load_unlimited = b
+    @yq << true
   end
 
   def init_screen
@@ -300,39 +311,54 @@ class KV_Screen
         render_status
         ev = Curses.getch
         check_update
-        if @following_mode
-          if @rs.search && search_next_move(self.y + 1)
+        y_max = self.y_max
+
+        if @rs.search && @searching
+          if search_next_move
             break
           end
-          self.y = self.y_max
+        end
+
+        if @following_mode
+          self.y = y_max
         end
       end
 
-      if @following_mode
-        @following_mode = false
-        @load_unlimited = false
-      end
+      @following_mode = false
+      set_load_unlimited false
+      @searching = false
 
       return ev
     end
   end
 
-  def search_next_move start
-    (start...@lines.size).each{|i|
+  def search_next_move
+    last_line = @lines.size
+    log (@searching..last_line)
+
+    (@searching...last_line).each{|i|
       if @rs.search === @lines[i]
         self.y = i
+        @searching = false
         return true
       end
     }
+    @searching = last_line
     return false
   end
 
   def search_next start
-    if search_next_move start
-      # OK
+    @searching = start
+    if search_next_move
+      # OK. self.y is updated.
     else
-      screen_status "not found: [#{self.search_str}]"
-      pause
+      if @loading
+        set_load_unlimited true
+      else
+        screen_status "not found: [#{self.search_str}]"
+        pause
+        @searching = false
+      end
     end
   end
 
@@ -417,12 +443,10 @@ class KV_Screen
 
     when 'F'
       @following_mode = true
-      @load_unlimited = true
-      @yq << true
+      set_load_unlimited true
 
     when 'L'
-      @load_unlimited = !@load_unlimited
-      @yq << true
+      set_load_unlimited !@load_unlimited
 
     when '/'
       search_str = ''.dup
@@ -522,6 +546,9 @@ class KV_Screen
       Curses.close_screen
       @mode = :terminal
 
+    when Curses::KEY_CTRL_G
+      # do nothing
+
     when '?'
       raise KV_PushScreen.new(KV_Screen.new help_io)
 
@@ -551,6 +578,10 @@ class KV_Screen
     else
       raise
     end
+  end
+
+  def redraw!
+    @last_rs = nil
   end
 end
 
@@ -620,6 +651,7 @@ class KV
         @screens.pop
       rescue KV_PushScreen => e
         @screens.push e.screen
+        @screens.last.redraw!
       end
     end
   ensure
