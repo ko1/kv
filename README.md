@@ -30,6 +30,8 @@ $ kv
 Options:
     -f                               following mode like "tail -f"
     -n, --line-number LINE           goto LINE
+    -N                               Show lines
+    -T, --time-stamp                 Enable time stamp
 ```
 
 ## Command on a pager
