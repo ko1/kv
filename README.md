@@ -18,6 +18,9 @@ kv requires recent Ruby and curses gem.
 # View [FILE]
 $ kv [OPTIONS] [FILE]
 
+# View [URI] source code
+$ kv [URI]
+
 # View results of [CMD]
 $ [CMD] | kv [OPTIONS]
 
@@ -78,6 +81,7 @@ kv: A pager by Ruby Command list
   m: toggle mouse mode
   t: terminal (REPL) mode
   v: vi ("vi filename +[LINE]")
+  H: show HTTP response header
 ```
 
 `G` is notable feature, `less` doesn't have. This feature jumps to "current" last line even if the pipe source command does not close output (== input for kv). You can refresh the last line by putting any command.

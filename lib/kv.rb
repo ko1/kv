@@ -4,6 +4,7 @@ require "kv/version"
 require "curses"
 require 'stringio'
 require 'optparse'
+require 'open-uri'
 
 module KV
 class KV_PushScreen < Exception
@@ -60,6 +61,7 @@ class KV_Screen
     end
 
     @prev_render = {}
+    @meta = input.respond_to?(:meta) ? input.meta : nil
 
     read_async input if input
   end
@@ -546,6 +548,12 @@ class KV_Screen
       Curses.close_screen
       @mode = :terminal
 
+    when 'H'
+      if @meta
+        lines = @meta.map{|k, v| "#{k}: #{v}"}
+        raise KV_PushScreen.new(KV_Screen.new nil, lines: lines, name: "Response header [#{@name}]")
+      end
+
     when Curses::KEY_CTRL_G
       # do nothing
 
@@ -612,12 +620,16 @@ class KV
       begin
         input = open(name)
       rescue
-        if /(.+):(\d+)/ =~ name
+        case name
+        when /(.+):(\d+)/
           name = $1
           @first_line = $2.to_i - 1
           retry
+        when URI.regexp
+          input = URI.open(name)
+        else
+          raise
         end
-        raise
       end
     end
 
