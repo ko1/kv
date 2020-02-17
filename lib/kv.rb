@@ -64,6 +64,7 @@ class Screen
 
     @prev_render = {}
     @meta = input.respond_to?(:meta) ? input.meta : nil
+    @input = input
 
     read_async input if input
   end
@@ -583,6 +584,12 @@ class Screen
     when 't'
       Curses.close_screen
       @mode = :terminal
+    when 'x'
+      if @input && !@input.closed?
+        screen_status "input for ext:"
+        str = input_str(/./)
+        @input.puts str
+      end
 
     when 'H'
       if @meta
@@ -645,7 +652,13 @@ class KV
     @pipe_in = nil
 
     if files.empty?
-      if STDIN.isatty
+      case
+      when @opts[:e]
+        cmd = @opts.delete(:e)
+        input = IO.popen(cmd, 'a+')
+        name = nil
+        @pipe_in = input
+      when STDIN.isatty
         input = help_io
         name = 'HELP'
       else
@@ -693,6 +706,9 @@ class KV
     }
     opts.on('-T', '--time-stamp', 'Enable time stamp'){
       @opts[:time_stamp] = true
+    }
+    opts.on('-e CMD'){|cmd|
+      @opts[:e] = cmd
     }
     opts.parse!(argv)
   end
