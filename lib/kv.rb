@@ -7,17 +7,17 @@ require 'optparse'
 require 'open-uri'
 
 module KV
-class KV_PushScreen < Exception
+class PushScreen < Exception
   attr_reader :screen
   def initialize screen
     @screen = screen
   end
 end
 
-class KV_PopScreen < Exception
+class PopScreen < Exception
 end
 
-class KV_Screen
+class Screen
   RenderStatus = Struct.new(
     :c_cols, :c_lines, :x, :y, :last_lineno,
     :search, :goto, :line_mode, :wrapping,
@@ -414,7 +414,7 @@ class KV_Screen
 
     case ev
     when 'q'
-      raise KV_PopScreen
+      raise PopScreen
 
     when Curses::KEY_UP, 'k'
       self.y -= 1
@@ -500,8 +500,8 @@ class KV_Screen
         filter_mode_title = "*filter mode [#{self.search_str}]*"
         if @name != filter_mode_title
           lines = @lines.grep(@rs.search)
-          fscr = KV_Screen.new nil, lines: lines, search: @rs.search, name: filter_mode_title
-          raise KV_PushScreen.new(fscr)
+          fscr = Screen.new nil, lines: lines, search: @rs.search, name: filter_mode_title
+          raise PushScreen.new(fscr)
         end
       end
 
@@ -551,14 +551,14 @@ class KV_Screen
     when 'H'
       if @meta
         lines = @meta.map{|k, v| "#{k}: #{v}"}
-        raise KV_PushScreen.new(KV_Screen.new nil, lines: lines, name: "Response header [#{@name}]")
+        raise PushScreen.new(Screen.new nil, lines: lines, name: "Response header [#{@name}]")
       end
 
     when Curses::KEY_CTRL_G
       # do nothing
 
     when '?'
-      raise KV_PushScreen.new(KV_Screen.new help_io)
+      raise PushScreen.new(Screen.new help_io)
 
     when nil
       # ignore
@@ -637,7 +637,7 @@ class KV
       log "SIGINT"
     }
 
-    @screens = [KV_Screen.new(input, name: name, **@opts)]
+    @screens = [Screen.new(input, name: name, **@opts)]
   end
 
   def parse_option argv
@@ -659,9 +659,9 @@ class KV
     until @screens.empty?
       begin
         @screens.last.control
-      rescue KV_PopScreen
+      rescue PopScreen
         @screens.pop
-      rescue KV_PushScreen => e
+      rescue PushScreen => e
         @screens.push e.screen
         @screens.last.redraw!
       end
