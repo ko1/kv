@@ -619,7 +619,7 @@ class KV
       name = files.shift
       begin
         input = open(name)
-      rescue
+      rescue Errno::ENOENT
         case name
         when /(.+):(\d+)/
           name = $1
@@ -628,7 +628,8 @@ class KV
         when URI.regexp
           input = URI.open(name)
         else
-          raise
+          STDERR.puts "#{name}: No such file or directory"
+          exit 1
         end
       end
     end
