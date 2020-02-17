@@ -20,7 +20,7 @@ end
 class Screen
   RenderStatus = Struct.new(
     :c_cols, :c_lines, :x, :y, :last_lineno,
-    :search, :goto, :line_mode, :wrapping,
+    :search, :goto, :line_mode, :ts_mode, :wrapping,
   )
   class RenderStatus
     def to_s
@@ -28,7 +28,7 @@ class Screen
     end
   end
 
-  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0, line_mode: false
+  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0, line_mode: false, time_stamp: nil
     @rs = RenderStatus.new
     @last_rs = nil
     @rs.y = first_line
@@ -37,10 +37,12 @@ class Screen
     @rs.last_lineno = 0
     @rs.line_mode = line_mode
     @rs.search = search
-    @rs.wrapping = true
+    @rs.wrapping = false
+    @rs.ts_mode = false
 
     @name = name
     @filename = @name if @name && File.exist?(@name)
+    @time_stamp = time_stamp
 
     @lines = lines
     @mode = :screen
@@ -68,6 +70,7 @@ class Screen
 
   def setup_line line
     line = line.chomp
+    line.instance_variable_set(:@time_stamp, Time.now.strftime('%H:%M:%S')) if @time_stamp
     line.instance_variable_set(:@lineno, @rs.last_lineno += 1)
     line
   end
@@ -243,6 +246,13 @@ class Screen
             Curses.addstr(ln_str)
           end
           cols -= ln_str.size
+        end
+      end
+
+      if @rs.ts_mode && ts = line.instance_variable_get(:@time_stamp)
+        cattr LINE_ATTR do
+          ts = line.instance_variable_get(:@time_stamp)
+          Curses.addstr("#{ts} |")
         end
       end
 
@@ -544,6 +554,8 @@ class Screen
 
     when 'N'
       @rs.line_mode = !@rs.line_mode
+    when 'T'
+      @rs.ts_mode = !@rs.ts_mode if @time_stamp
     when 't'
       Curses.close_screen
       @mode = :terminal
@@ -651,6 +663,9 @@ class KV
     }
     opts.on('-N', 'Show lines'){
       @opts[:line_mode] = true
+    }
+    opts.on('-T', '--time-stamp', 'Enable time stamp'){
+      @opts[:time_stamp] = true
     }
     opts.parse!(argv)
   end

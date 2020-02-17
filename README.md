@@ -78,6 +78,7 @@ kv: A pager by Ruby Command list
 
   # Modes
   N: toggle line mode
+  T: toggle time stamp mode
   m: toggle mouse mode
   t: terminal (REPL) mode
   v: vi ("vi filename +[LINE]")
