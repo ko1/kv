@@ -75,6 +75,7 @@ kv: A pager by Ruby Command list
 
   # Output
   s: Save screen buffer to file
+  P: gist -p
 
   # Modes
   N: toggle line mode

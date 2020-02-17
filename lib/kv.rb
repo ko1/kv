@@ -205,8 +205,8 @@ class Screen
 
   def render_data
     # check update
-    c_lines = Curses.lines
-    c_cols  = Curses.cols
+    c_lines = @rs.c_lines = Curses.lines
+    c_cols = @rs.c_cols  = Curses.cols
 
     if @rs != @last_rs
       @last_rs = @rs.dup
@@ -542,6 +542,30 @@ class Screen
         @last_rs = nil
       end
 
+    when 'P'
+      begin
+        if v = `gist -v` and /^gist v\d/ =~ v
+          screen_status "gist-ing..."
+
+          url = IO.popen('gist -p', 'a+'){|rw|
+            @lines.each{|line| rw.puts line}
+            rw.close_write
+            rw.read
+          }
+          msg = "gist URL: #{url}"
+          at_exit{
+            puts msg
+          }
+          screen_status msg
+          pause
+        else
+          raise v.inspect
+        end
+      rescue Errno::ENOENT
+        screen_status 'gist command is not found'
+        pause
+      end
+
     when 'm'
       @mouse = !@mouse
       Curses.close_screen
@@ -573,6 +597,9 @@ class Screen
       raise PushScreen.new(Screen.new help_io)
 
     when nil
+      # ignore
+
+    when Curses::KEY_RESIZE
       # ignore
 
     else
