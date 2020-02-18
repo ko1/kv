@@ -32,6 +32,7 @@ Options:
     -n, --line-number LINE           goto LINE
     -N                               Show lines
     -T, --time-stamp                 Enable time stamp
+    -e CMD                           Run CMD as a child process
 ```
 
 ## Command on a pager
@@ -78,6 +79,12 @@ kv: A pager by Ruby Command list
   # Output
   s: Save screen buffer to file
   P: gist -p
+
+  # Child process
+  You can run child process using -e command line option like -e CMD
+  and you can send a meesage to the child process with x command.
+
+  x: send a message to the child process
 
   # Modes
   N: toggle line mode

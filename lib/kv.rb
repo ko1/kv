@@ -732,7 +732,7 @@ class KV
     opts.on('-T', '--time-stamp', 'Enable time stamp'){
       @opts[:time_stamp] = true
     }
-    opts.on('-e CMD'){|cmd|
+    opts.on('-e CMD', 'Run CMD as a child process'){|cmd|
       @opts[:e] = cmd
     }
     opts.parse!(argv)
