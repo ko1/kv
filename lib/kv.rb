@@ -28,7 +28,10 @@ class Screen
     end
   end
 
-  def initialize input, lines: [], search: nil, name: nil, following_mode: false, first_line: 0, line_mode: false, time_stamp: nil
+  def initialize input, lines: [],
+                 name: nil, search: nil, first_line: 0,
+                 following_mode: false, line_mode: false,
+                 time_stamp: nil, ext_input: nil
     @rs = RenderStatus.new
     @last_rs = nil
     @rs.y = first_line
@@ -42,7 +45,9 @@ class Screen
 
     @name = name
     @filename = @name if @name && File.exist?(@name)
+
     @time_stamp = time_stamp
+    @ext_input = ext_input
 
     @lines = lines
     @mode = :screen
@@ -64,7 +69,6 @@ class Screen
 
     @prev_render = {}
     @meta = input.respond_to?(:meta) ? input.meta : nil
-    @input = input
 
     read_async input if input
   end
@@ -190,18 +194,6 @@ class Screen
     end
   end
 
-  def screen_status status, post = nil
-    Curses.setpos Curses.lines-1, 0
-    Curses.addstr ' '.ljust(Curses.cols)
-
-    standout{
-      Curses.setpos Curses.lines-1, 0
-      Curses.addstr status
-    }
-    Curses.addstr post if post
-    Curses.standend
-  end
-
   LINE_ATTR = Curses::A_DIM
 
   def render_data
@@ -294,6 +286,18 @@ class Screen
     loading = @loading ? " (loading...#{@load_unlimited ? '!' : nil}#{@following_mode ? ' following' : ''}) " : ''
     x = self.x > 0 ? " x:#{self.x}" : ''
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
+  end
+
+  def screen_status status, post = nil
+    Curses.setpos Curses.lines-1, 0
+    Curses.addstr ' '.ljust(Curses.cols)
+
+    standout{
+      Curses.setpos Curses.lines-1, 0
+      Curses.addstr status
+    }
+    Curses.addstr post if post
+    Curses.standend
   end
 
   def check_update
@@ -393,26 +397,32 @@ class Screen
     ev
   end
 
-  def input_str pattern, str = ''.dup, other_actions: nil
-    loop{
-      ev = Curses.getch
+  def input_str pattern, str = ''.dup, other_actions: {}
+    update_action = other_actions[:update]
 
-      case ev
-      when 10
-        return str
-      when Curses::KEY_BACKSPACE
-        str.chop!
-      when pattern
-        str << ev
-      else
-        if other_actions && (action = other_actions[ev])
-          action.call(ev)
+    ctimeout update_action ? 200 : -1 do
+      loop do
+        ev = Curses.getch
+
+        case ev
+        when 10
+          return str
+        when Curses::KEY_BACKSPACE
+          str.chop!
+        when pattern
+          str << ev
+        when nil # timeout
+          update_action[str]
         else
-          log "failure: #{key_name ev}"
-          return nil
+          if action = other_actions[ev]
+            action.call(ev)
+          else
+            log "failure: #{key_name ev}"
+            return nil
+          end
         end
       end
-    }
+    end
   end
 
   def pause
@@ -539,7 +549,7 @@ class Screen
 
     when 'v'
       if @filename
-        system("vi #{@filename} +#{self.y + 1}")
+        syste m("vi #{@filename} +#{self.y + 1}")
         @last_rs = nil
       end
 
@@ -585,10 +595,24 @@ class Screen
       Curses.close_screen
       @mode = :terminal
     when 'x'
-      if @input && !@input.closed?
-        screen_status "input for ext:"
-        str = input_str(/./)
-        @input.puts str
+      while @ext_input && !@ext_input.closed?
+        update_ext_status = -> str do
+          screen_status "input for ext:", str
+        end
+        update_ext_status['']
+        actions = {
+          update: -> str do
+            self.y = self.y_max
+            render_data
+            update_ext_status[str]
+          end
+        }
+        str = input_str(/./, other_actions: actions)
+        if str && !str.empty?
+          @ext_input.puts str unless @ext_input.closed?
+        else
+          break
+        end
       end
 
     when 'H'
@@ -658,6 +682,7 @@ class KV
         input = IO.popen(cmd, 'a+')
         name = nil
         @pipe_in = input
+        @opts[:ext_input] = input
       when STDIN.isatty
         input = help_io
         name = 'HELP'
