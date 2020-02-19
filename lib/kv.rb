@@ -54,6 +54,7 @@ class Screen
 
     @following_mode = following_mode
     @searching = false
+    @apos = 0
 
     @mouse = false
     @search_ignore_case = false
@@ -288,16 +289,42 @@ class Screen
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
 
+  ANIMATION = ['[O     ]',
+               '[o.    ]',
+               '[...   ]',
+               '[ ...  ]',
+               '[  ... ]',
+               '[   ...]',
+               '[    .o]',
+               '[     O]',
+               '[    .o]',
+               '[   ...]',
+               '[  ... ]',
+               '[  ... ]',
+               '[ ...  ]',
+               '[...   ]',
+               '[o.    ]',
+               ]
+
   def screen_status status, post = nil
-    Curses.setpos Curses.lines-1, 0
-    Curses.addstr ' '.ljust(Curses.cols)
+    cols = Curses.cols
+    line = Curses.lines-1
+    Curses.setpos line, 0
+    Curses.addstr ' '.ljust(cols)
+    len  = status.size
+    len += post.size if post
 
     standout{
       Curses.setpos Curses.lines-1, 0
       Curses.addstr status
     }
     Curses.addstr post if post
-    Curses.standend
+
+    if !post && len < cols - ANIMATION.first.size
+      Curses.setpos line, cols - ANIMATION.first.size - 1
+      @apos = (@apos + 1) % ANIMATION.size
+      Curses.addstr ANIMATION[@apos]
+    end
   end
 
   def check_update
