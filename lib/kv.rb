@@ -52,8 +52,7 @@ class Screen
     @lines = lines
     @mode = :screen
 
-    @following_mode = following_mode
-    @searching = false
+    @following = following_mode
     @apos = 0
 
     @mouse = false
@@ -123,7 +122,8 @@ class Screen
   end
 
   def y_max
-    @lines.size - Curses.lines + 2
+    max = @lines.size - Curses.lines + 2
+    max < 0 ? 0 : max
   end
 
   def y
@@ -166,6 +166,11 @@ class Screen
                        Curses::BUTTON3_CLICKED | Curses::BUTTON4_CLICKED)
     else
       Curses.mousemask(0)
+    end
+
+    if @loading && self.y_max < @rs.y
+      log [:going, self.y_max, @rs.y]
+      @following = :going
     end
     self.y = @rs.y
   end
@@ -284,7 +289,7 @@ class Screen
     name = @name ? "<#{@name}>" : ''
     mouse  = @mouse ? ' [MOUSE]' : ''
     search = @rs.search ? " search[#{search_str}]" : ''
-    loading = @loading ? " (loading...#{@load_unlimited ? '!' : nil}#{@following_mode ? ' following' : ''}) " : ''
+    loading = @loading ? " (loading...#{@load_unlimited ? '!' : nil}#{@following ? ' following' : ''}) " : ''
     x = self.x > 0 ? " x:#{self.x}" : ''
     screen_status "#{name} lines:#{self.y+1}/#{@lines.size}#{x}#{loading}#{search}#{mouse}"
   end
@@ -347,7 +352,7 @@ class Screen
   def render_screen
     ev = nil
 
-    ms = @following_mode ? 100 : 500
+    ms = @following ? 100 : 500
 
     ctimeout ms do
       while ev == nil
@@ -357,20 +362,27 @@ class Screen
         check_update
         y_max = self.y_max
 
-        if @rs.search && @searching
-          if search_next_move
-            break
+        if @following
+          case @following
+          when :searching
+            break if search_next_move
+          when :going
+            if @rs.goto <= y_max
+              self.y = @rs.goto
+              break
+            end
+          when true
+            # ok
+          else
+            raise "unknown following mode: #{@following}"
           end
-        end
 
-        if @following_mode
           self.y = y_max
         end
       end
 
-      @following_mode = false
+      @following = false
       set_load_unlimited false
-      @searching = false
 
       return ev
     end
@@ -378,7 +390,7 @@ class Screen
 
   def search_next_move
     last_line = @lines.size
-    log (@searching..last_line)
+    # log (@searching..last_line)
 
     (@searching...last_line).each{|i|
       if @rs.search === @lines[i]
@@ -398,6 +410,7 @@ class Screen
     else
       if @loading
         set_load_unlimited true
+        @following = :searching
       else
         screen_status "not found: [#{self.search_str}]"
         pause
@@ -492,7 +505,7 @@ class Screen
       end
 
     when 'F'
-      @following_mode = true
+      @following = true
       set_load_unlimited true
 
     when 'L'
@@ -727,7 +740,7 @@ class KV
         case name
         when /(.+):(\d+)/
           name = $1
-          @first_line = $2.to_i - 1
+          @opts[:first_line] = $2.to_i - 1
           retry
         when URI.regexp
           input = URI.open(name)
