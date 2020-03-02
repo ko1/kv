@@ -83,7 +83,7 @@ class Screen
   def read_async input
     @loading = true
     begin
-      data = input.read_nonblock(4096)
+      data = input.read_nonblock(800_000)
     rescue IO::EAGAINWaitReadable, EOFError
       data = ''
     end
