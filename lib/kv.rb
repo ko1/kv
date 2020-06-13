@@ -31,7 +31,7 @@ class Screen
   def initialize input, lines: [],
                  name: nil, search: nil, first_line: 0,
                  following_mode: false, line_mode: false,
-                 time_stamp: nil, ext_input: nil
+                 time_stamp: nil, ext_input: nil, fifo_file: nil
     @rs = RenderStatus.new
     @last_rs = nil
     @rs.y = first_line
@@ -48,6 +48,7 @@ class Screen
 
     @time_stamp = time_stamp
     @ext_input = ext_input
+    @fifo_file = fifo_file
 
     @lines = lines
     @mode = :screen
@@ -106,6 +107,7 @@ class Screen
         end
 
         @lines << setup_line(line)
+
         while !@load_unlimited && @lines.size > self.y + @buffer_lines
           @yq.pop; @yq.clear
         end
@@ -115,6 +117,10 @@ class Screen
       if @filename
         @file_mtime = File.mtime(@filename)
         @file_lastpos = input.tell
+      elsif @fifo_file
+        input = open(@fifo_file)
+        log(input)
+        redo
       end
       input.close
       @loading = false
@@ -712,10 +718,31 @@ class KV
     }
 
     files = parse_option(argv)
+    name = files.shift
 
     @pipe_in = nil
 
-    if files.empty?
+    if @opts[:pipe] || (name && File.pipe?(name))
+      @opts.delete(:pipe)
+      @opts[:fifo_file] = name || '/tmp/kv_pipe'
+
+      if name && File.pipe?(name)
+        # ok
+      else
+        begin
+          name ||= File.expand_path('~/.kv_pipe')
+          unlink_name = name
+          File.mkfifo(name)
+          at_exit{ puts "$ rm #{unlink_name}"; File.unlink(unlink_name) }
+        rescue Errno::EEXIST
+          raise "#{name} already exists."
+        end
+      end
+
+      puts "waiting for #{name}"
+      input = @pipe_in = open(name)
+      name = nil
+    elsif !name
       case
       when @opts[:e]
         cmd = @opts.delete(:e)
@@ -733,7 +760,6 @@ class KV
         @pipe_in = input
       end
     else
-      name = files.shift
       begin
         input = open(name)
       rescue Errno::ENOENT
@@ -774,6 +800,9 @@ class KV
     }
     opts.on('-e CMD', 'Run CMD as a child process'){|cmd|
       @opts[:e] = cmd
+    }
+    opts.on('-p', '--pipe', 'Open named pipe'){
+      @opts[:pipe] = true
     }
     opts.parse!(argv)
   end

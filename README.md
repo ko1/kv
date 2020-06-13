@@ -10,8 +10,6 @@ Install it yourself as:
 
 kv requires recent Ruby and curses gem.
 
-# Usage
-
 ## Use kv
 
 ```
@@ -27,13 +25,16 @@ $ [CMD] | kv [OPTIONS]
 # View command help
 $ kv
 
-Options:
+Usage: kv [options]
     -f                               following mode like "tail -f"
     -n, --line-number LINE           goto LINE
     -N                               Show lines
     -T, --time-stamp                 Enable time stamp
     -e CMD                           Run CMD as a child process
+    -p, --pipe                       Open named pipe
 ```
+
+Note that `--pipe` option creates a named pipe (`~/.kv_pipe` or a specified file) if there is not a fifo file.
 
 ## Command on a pager
 
