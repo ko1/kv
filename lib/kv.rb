@@ -30,7 +30,7 @@ class Screen
 
   def initialize input, lines: [],
                  name: nil, search: nil, first_line: 0,
-                 following_mode: false, line_mode: false,
+                 following_mode: false, line_mode: false, separation_mode: false,
                  time_stamp: nil, ext_input: nil, fifo_file: nil
     @rs = RenderStatus.new
     @last_rs = nil
@@ -49,6 +49,7 @@ class Screen
     @time_stamp = time_stamp
     @ext_input = ext_input
     @fifo_file = fifo_file
+    @separation_mode = separation_mode
 
     @lines = lines
     @mode = :screen
@@ -221,6 +222,15 @@ class Screen
 
     Curses.clear
 
+    if @separation_mode && (lines = @lines[self.y ... (self.y + c_lines - 1)])
+      max_cols = []
+      lines.each.with_index{|line, ln|
+        line.split("\t").each_with_index{|w, i|
+          max_cols[i] = max_cols[i] ? [max_cols[i], w.size].max : w.size
+        }
+      }
+    end
+
     (c_lines-1).times{|i|
       lno = i + self.y
       line = @lines[lno]
@@ -262,6 +272,17 @@ class Screen
       end
 
       line = line[self.x, cols] || ''
+
+      if @separation_mode
+        line = line.split(/\t/).tap{|e|
+          if (max = max_cols.size) > 0
+            # fill empty columns
+            e[max - 1] ||= nil
+          end
+        }.map.with_index{|w, i|
+          "%-#{max_cols[i]}s" % w
+        }.join(' | ')
+      end
 
       if !@rs.search || !(Regexp === @rs.search)
         Curses.addstr line
@@ -803,6 +824,9 @@ class KV
     }
     opts.on('-p', '--pipe', 'Open named pipe'){
       @opts[:pipe] = true
+    }
+    opts.on('-s', 'Separation mode (tsv)'){
+      @opts[:separation_mode] = true
     }
     opts.parse!(argv)
   end

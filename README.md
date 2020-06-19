@@ -32,6 +32,7 @@ Usage: kv [options]
     -T, --time-stamp                 Enable time stamp
     -e CMD                           Run CMD as a child process
     -p, --pipe                       Open named pipe
+    -s                               Separation mode (tsv)
 ```
 
 Note that `--pipe` option creates a named pipe (`~/.kv_pipe` or a specified file) if there is not a fifo file.
