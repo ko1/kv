@@ -20,7 +20,8 @@ end
 class Screen
   RenderStatus = Struct.new(
     :c_cols, :c_lines, :x, :y, :last_lineno,
-    :search, :goto, :line_mode, :ts_mode, :wrapping,
+    :search, :goto, :wrapping,
+    :line_mode, :ts_mode, :separation_mode,
   )
   class RenderStatus
     def to_s
@@ -42,6 +43,7 @@ class Screen
     @rs.search = search
     @rs.wrapping = false
     @rs.ts_mode = false
+    @rs.separation_mode = separation_mode
 
     @name = name
     @filename = @name if @name && File.exist?(@name)
@@ -49,7 +51,6 @@ class Screen
     @time_stamp = time_stamp
     @ext_input = ext_input
     @fifo_file = fifo_file
-    @separation_mode = separation_mode
 
     @lines = lines
     @mode = :screen
@@ -222,7 +223,7 @@ class Screen
 
     Curses.clear
 
-    if @separation_mode && (lines = @lines[self.y ... (self.y + c_lines - 1)])
+    if @rs.separation_mode && (lines = @lines[self.y ... (self.y + c_lines - 1)])
       max_cols = []
       lines.each.with_index{|line, ln|
         line.split("\t").each_with_index{|w, i|
@@ -273,7 +274,7 @@ class Screen
 
       line = line[self.x, cols] || ''
 
-      if @separation_mode
+      if @rs.separation_mode
         line = line.split(/\t/).tap{|e|
           if (max = max_cols.size) > 0
             # fill empty columns
@@ -658,6 +659,8 @@ class Screen
       @rs.line_mode = !@rs.line_mode
     when 'T'
       @rs.ts_mode = !@rs.ts_mode if @time_stamp
+    when 'S'
+      @rs.separation_mode = !@rs.separation_mode
     when 't'
       Curses.close_screen
       @mode = :terminal
