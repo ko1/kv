@@ -841,7 +841,7 @@ class KV
         @screens.last.control
       rescue PopScreen
         @screens.pop
-        @screens.last.redraw!
+        @screens.last.redraw! unless @screens.empty?
       rescue PushScreen => e
         @screens.push e.screen
         @screens.last.redraw!
