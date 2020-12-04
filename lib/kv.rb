@@ -185,9 +185,9 @@ class Screen
 
   
   def standout
-    Curses.standout
-    yield
-    Curses.standend
+    cattr Curses::A_STANDOUT do
+      yield
+    end
   end
 
   def cattr attr
@@ -285,18 +285,21 @@ class Screen
         }.join(' | ')
       end
 
-      if !@rs.search || !(Regexp === @rs.search)
+      if !@rs.search || !(Regexp === @rs.search) ||
+         (parts = search_partition(line, @rs.search)).is_a?(String)
         Curses.addstr line
       else
-        partition(line, @rs.search).each{|(matched, str)|
-          if matched == :match
-            standout{
+        cattr Curses::A_UNDERLINE do
+          parts.each{|(matched, str)|
+            if matched == :match
+              standout{
+                Curses.addstr str
+              }
+            else
               Curses.addstr str
-            }
-          else
-            Curses.addstr str
-          end
-        }
+            end
+          }
+        end
       end
     }
   end
@@ -865,18 +868,23 @@ def log obj, prefix = ''
   end
 end
 
-def partition str, search
+def search_partition str, search
   results = []
   loop{
     r = str.match(search){|m|
       break if m.post_match == str
-      results << [:unmatch, m.pre_match]
+      results << [:unmatch, m.pre_match] unless m.pre_match.empty?
       results << [:match, m.to_s]
       str = m.post_match
     }
     break unless r
   }
-  results << [:unmatch, str]
+  if results.empty?
+    str
+  else
+    results << [:unmatch, str] unless str.empty?
+    results
+  end
 end
 
 def help_io
