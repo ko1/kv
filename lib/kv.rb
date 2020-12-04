@@ -224,10 +224,10 @@ class Screen
     Curses.clear
 
     if @rs.separation_mode && (lines = @lines[self.y ... (self.y + c_lines - 1)])
-      max_cols = []
+      @max_cols = [] unless defined? @max_cols
       lines.each.with_index{|line, ln|
         line.split("\t").each_with_index{|w, i|
-          max_cols[i] = max_cols[i] ? [max_cols[i], w.size].max : w.size
+          @max_cols[i] = @max_cols[i] ? [@max_cols[i], w.size].max : w.size
         }
       }
     end
@@ -276,12 +276,12 @@ class Screen
 
       if @rs.separation_mode
         line = line.split(/\t/).tap{|e|
-          if (max = max_cols.size) > 0
+          if (max = @max_cols.size) > 0
             # fill empty columns
             e[max - 1] ||= nil
           end
         }.map.with_index{|w, i|
-          "%-#{max_cols[i]}s" % w
+          "%-#{@max_cols[i]}s" % w
         }.join(' | ')
       end
 
@@ -661,6 +661,7 @@ class Screen
       @rs.ts_mode = !@rs.ts_mode if @time_stamp
     when 'S'
       @rs.separation_mode = !@rs.separation_mode
+      @max_cols = []
     when 't'
       Curses.close_screen
       @mode = :terminal
