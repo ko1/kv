@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "kv/version"
+require_relative "kv/version"
 require "curses"
 require 'stringio'
 require 'optparse'
@@ -30,9 +30,18 @@ class Screen
   end
 
   def initialize input, lines: [],
-                 name: nil, search: nil, first_line: 0,
-                 following_mode: false, line_mode: false, separation_mode: false,
-                 time_stamp: nil, ext_input: nil, fifo_file: nil
+                 name: nil,
+                 search: nil,
+                 first_line: 0,
+                 following_mode: false,
+                 line_mode: false,
+                 separation_mode: false,
+                 time_stamp: nil,
+                 ext_input: nil,
+                 fifo_file: nil,
+                 watch: false,
+                 filter_command: nil
+
     @rs = RenderStatus.new
     @last_rs = nil
     @rs.y = first_line
@@ -54,6 +63,9 @@ class Screen
 
     @lines = lines
     @mode = :screen
+
+    @watch_mode = watch
+    @filter_command = filter_command
 
     @following = following_mode
     @apos = 0
@@ -368,14 +380,21 @@ class Screen
       if @filename && File.exist?(@filename) && File.mtime(@filename) > @file_mtime
         input = open(@filename)
 
-        if input.size < @file_lastpos
-          screen_status "#{@filename} is truncated. Rewinded."
-          pause
-          @lineno = 0
+        screen_status "#{@filename} is updated."
+
+        if @watch_mode
+          @lines = []
+          read_async input
         else
-          input.seek @file_lastpos
+          if input.size < @file_lastpos
+            screen_status "#{@filename} is truncated. Rewinded."
+            pause
+            @lineno = 0
+          else
+            input.seek @file_lastpos
+          end
+          read_async input
         end
-        read_async input
       end
     end
   end
@@ -835,6 +854,12 @@ class KV
     opts.on('-s', 'Separation mode (tsv)'){
       @opts[:separation_mode] = true
     }
+    opts.on('-w', 'Watch mode: Reload on file changed'){
+      @opts[:watch] = true
+    }
+    opts.on('--filter-command=FILTER_COMMAND', 'Apply filter command'){|cmd|
+      @opts[:filter_command] = cmd
+    }
     opts.parse!(argv)
   end
 
@@ -900,5 +925,5 @@ def help_io
     end
   }
 
-  help_io = StringIO.new(help.join)
+  StringIO.new(help.join)
 end
