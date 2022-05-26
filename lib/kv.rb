@@ -56,6 +56,7 @@ class Screen
 
     @name = name
     @filename = @name if @name && File.exist?(@name)
+    @filter_command = @filename && filter_command
 
     @time_stamp = time_stamp
     @ext_input = ext_input
@@ -65,7 +66,6 @@ class Screen
     @mode = :screen
 
     @watch_mode = watch
-    @filter_command = filter_command
 
     @following = following_mode
     @apos = 0
@@ -83,9 +83,21 @@ class Screen
     end
 
     @prev_render = {}
+    input = open_file if @filename
     @meta = input.respond_to?(:meta) ? input.meta : nil
-
     read_async input if input
+  end
+
+  def open_file
+    input = open(@filename)
+    @rs.last_lineno = 0
+
+    if @filter_command
+      io = IO.popen("#{@filter_command} #{@filename}", err: '/dev/null')
+      # io.close_write
+      input = io
+    end
+    input
   end
 
   def setup_line line
@@ -130,7 +142,7 @@ class Screen
     ensure
       if @filename
         @file_mtime = File.mtime(@filename)
-        @file_lastpos = input.tell
+        @file_lastpos = input.tell unless @filter_command
       elsif @fifo_file
         input = open(@fifo_file)
         log(input)
@@ -377,15 +389,16 @@ class Screen
 
   def check_update
     if @loading == false
-      if @filename && File.exist?(@filename) && File.mtime(@filename) > @file_mtime
-        input = open(@filename)
-
+      if @filename && File.mtime(@filename) > @file_mtime
         screen_status "#{@filename} is updated."
 
         if @watch_mode
           @lines = []
+          input = open_file
           read_async input
         else
+          input = open(@filename)
+
           if input.size < @file_lastpos
             screen_status "#{@filename} is truncated. Rewinded."
             pause
