@@ -1,9 +1,9 @@
 #! /usr/bin/env ruby
 
-if File.exist?(File.join(__dir__, '../lib/kv.rb'))
-  $:.unshift File.join(__dir__, '../lib')
+begin
   require 'kv'
-else
+rescue
+  $:.unshift File.join(__dir__, '../lib')
   require 'kv'
 end
 
