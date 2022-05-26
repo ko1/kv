@@ -23,7 +23,7 @@ $ kv [URI]
 $ [CMD] | kv [OPTIONS]
 
 # View command help
-$ kv
+$ kv --help
 
 Usage: kv [options]
     -f                               following mode like "tail -f"
@@ -33,6 +33,9 @@ Usage: kv [options]
     -e CMD                           Run CMD as a child process
     -p, --pipe                       Open named pipe
     -s                               Separation mode (tsv)
+    -w                               Watch mode: Reload on file changed
+        --filter-command=FILTER_COMMAND
+                                     Apply filter command
 ```
 
 Note that `--pipe` option creates a named pipe (`~/.kv_pipe` or a specified file) if there is not a fifo file.
